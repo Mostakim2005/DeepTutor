@@ -69,7 +69,12 @@ def runtime_dir(app_id: str, runtime: AppRuntime) -> Path:
 
 
 def bin_dir(app_id: str, runtime: AppRuntime) -> Path:
-    return runtime_dir(app_id, runtime) / "bin"
+    rdir = runtime_dir(app_id, runtime)
+    if os.name == "nt":
+        if (rdir / "Scripts").is_dir():
+            return rdir / "Scripts"
+        return rdir
+    return rdir / "bin"
 
 
 def executable_path(app_id: str, runtime: AppRuntime, entry_point: str) -> Path:
@@ -81,7 +86,14 @@ def executable_path(app_id: str, runtime: AppRuntime, entry_point: str) -> Path:
     """
     if ENTRY_POINT_RE.match(entry_point) is None:
         raise ValueError(f"Unusable CLI app entry point {entry_point!r}")
-    return bin_dir(app_id, runtime) / entry_point
+    bdir = bin_dir(app_id, runtime)
+    target = bdir / entry_point
+    if os.name == "nt" and not target.is_file():
+        for ext in (".exe", ".cmd", ".bat"):
+            candidate = bdir / f"{entry_point}{ext}"
+            if candidate.is_file():
+                return candidate
+    return target
 
 
 def install_log_path(app_id: str) -> Path:

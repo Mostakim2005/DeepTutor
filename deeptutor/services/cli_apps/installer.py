@@ -202,11 +202,24 @@ def _steps(entry: CliAppEntry, env_dir) -> list[tuple[list[str], dict[str, str]]
     plan = entry.install
     if plan.runtime is AppRuntime.PYTHON:
         base = _clean_env()
+        python_exe = sys.executable
+        if os.name == "nt":
+            venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe")
+            if os.path.isfile(venv_python):
+                python_exe = venv_python
+        
+        uv_exe = shutil.which("uv")
+        python_in_venv = env_dir / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
+        if uv_exe:
+            return [
+                ([uv_exe, "venv", str(env_dir), "--python", python_exe], base),
+                ([uv_exe, "pip", "install", "--python", str(python_in_venv), plan.target], base),
+            ]
         return [
-            ([sys.executable, "-m", "venv", str(env_dir)], base),
+            ([python_exe, "-m", "venv", str(env_dir)], base),
             (
                 [
-                    str(env_dir / "bin" / "python"),
+                    str(python_in_venv),
                     "-m",
                     "pip",
                     "install",
@@ -240,8 +253,28 @@ def _clean_env() -> dict[str, str]:
     Passing the app's whole environment would hand a third-party ``setup.py``
     every provider API key the process holds.
     """
-    keep = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR")
+    keep = (
+        "PATH",
+        "Path",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "SystemRoot",
+        "SYSTEMROOT",
+        "COMSPEC",
+        "PATHEXT",
+        "USERPROFILE",
+        "LOCALAPPDATA",
+        "APPDATA",
+    )
     env = {key: os.environ[key] for key in keep if key in os.environ}
+    if "PATH" not in env and "Path" in env:
+        env["PATH"] = env["Path"]
     env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
     # Proxy settings are deployment infrastructure, not app state: an install
     # behind a corporate proxy needs them or it cannot reach the index at all.

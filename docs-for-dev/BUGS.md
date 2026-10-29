@@ -21,3 +21,8 @@
 - **Symptom**: Attempting to use `gpt-4o` under Codex failed because OpenAI Codex OAuth only provides access to `GPT-5.6-Terra`, `GPT-5.6-Luna`, and `GPT-6-Luna`.
 - **RCA**: A placeholder `llm-profile-agent-setup` profile generated during non-interactive init remained in `model_catalog.json`.
 - **Resolution**: Removed the obsolete profile from `model_catalog.json`.
+
+### BUG-005: Windows CLI App Venv Creation & `_clean_env` Environment Stripping
+- **Symptom**: Installing CLI apps from the catalog on Windows failed with `ensurepip` error and `error: Git operation failed. cause: Git executable not found`.
+- **RCA**: `_steps` in `installer.py` hardcoded `bin/python` (which is `Scripts/python.exe` on Windows), and `_clean_env` stripped `SystemRoot`, `PATHEXT`, and `COMSPEC`, breaking Windows subprocess invocation of `git.exe`.
+- **Resolution**: Updated `_steps` and `bin_dir`/`executable_path` to handle Windows `Scripts` and file extensions, preserved Windows system environment variables, and enabled `uv` acceleration for rapid venv creation and package installation.
