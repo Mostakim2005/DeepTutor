@@ -94,6 +94,19 @@ def _apply_single_user_allocator_env(env: dict[str, str]) -> None:
     env.setdefault("MALLOC_TRIM_THRESHOLD_", "131072")
 
 
+def _python_interpreter() -> str:
+    exe = Path(sys.executable)
+    if "python" in exe.stem.lower():
+        return sys.executable
+    candidate = exe.parent / ("python.exe" if os.name == "nt" else "python3")
+    if candidate.is_file():
+        return str(candidate)
+    candidate = exe.parent / "python"
+    if candidate.is_file():
+        return str(candidate)
+    return sys.executable
+
+
 # Mutable holder so module-level helpers can format messages in the active
 # UI language without threading the labels through every function.
 _ACTIVE_LABELS: dict[str, str] = labels_for("en")
@@ -701,7 +714,7 @@ def _owned_orphan_started_at(
                     for i in range(len(args) - 2)
                 ):
                     if (
-                        Path(candidate.exe()).resolve() == Path(sys.executable).resolve()
+                        Path(candidate.exe()).resolve() == Path(_python_interpreter()).resolve()
                         and Path(candidate.cwd()).resolve() == runtime_home.resolve()
                     ):
                         return process.create_time()
@@ -1329,7 +1342,7 @@ def _launch_detached(
     paths.state.parent.mkdir(parents=True, exist_ok=True)
     token = secrets.token_hex(16)
     command = [
-        sys.executable,
+        _python_interpreter(),
         "-m",
         "deeptutor_cli.main",
         "start",
@@ -1350,13 +1363,13 @@ def _launch_detached(
         "env": env,
         "stdin": subprocess.DEVNULL,
         "stderr": subprocess.STDOUT,
-        "close_fds": True,
+        "close_fds": sys.platform != "win32",
         "shell": False,
     }
     if sys.platform == "win32":
         kwargs["creationflags"] = (
             subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-            | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
+            | getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
         )
     else:
         kwargs["start_new_session"] = True
@@ -1678,7 +1691,7 @@ def start(
     )
 
     backend_cmd = [
-        sys.executable,
+        _python_interpreter(),
         "-m",
         "uvicorn",
         "deeptutor.api.main:app",

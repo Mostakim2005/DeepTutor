@@ -45,7 +45,7 @@ _PROVIDER_DEFAULT_OFF_PATTERNS: dict[str, tuple[str, ...]] = {
 # they accept (#734). Kept beside the patterns it narrows so adding a family
 # to one table is an obvious prompt to check the other.
 _MINIMAL_NOT_OFF_PATTERNS: dict[str, tuple[str, ...]] = {
-    "gemini": ("gemini-3", "gemini-2.5-pro"),
+    "gemini": ("gemini-2.5-pro",),
 }
 _CUSTOM_MODEL_THINKING_STYLES: tuple[tuple[tuple[str, ...], str], ...] = (
     (("qwen3", "qwen-3", "qwq", "qwen-plus"), "enable_thinking"),

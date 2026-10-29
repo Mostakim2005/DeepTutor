@@ -103,3 +103,13 @@ compatibility checks and Python integration points. An old migration plan is
 not evidence that the whole backend has moved to TypeScript. Changes here
 must preserve the application service, storage and public event contracts;
 see the dedicated engine jobs in [Testing](TESTING.md).
+
+## Local Platform & System Design Mechanics
+
+### Windows Launcher Architecture
+- Spawns background backend (`uvicorn` on port 8001) and frontend (`next start` on port 3782) using `deeptutor/runtime/launcher.py`.
+- On Windows, uses `.venv\Scripts\python.exe` and sets creation flags `CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW` to detach child processes properly.
+
+### Reasoning Parameter Resolution
+- Resolved in `deeptutor/services/llm/reasoning_params.py` and `deeptutor/services/model_selection/reasoning.py`.
+- Formats `reasoning_effort` vs `extra_body` thinking flags cleanly across OpenAI, Anthropic, DeepSeek, and Gemini models.
