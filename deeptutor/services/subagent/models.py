@@ -57,7 +57,22 @@ _CLAUDE_MODELS = (
 )
 _CLAUDE_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
-# Antigravity CLI: ``--effort`` accepts exactly these three.
+# Antigravity CLI: models supported via `agy models` and `--effort` options.
+_ANTIGRAVITY_MODELS = (
+    ("gemini-4-argon-high", "Gemini 4 Argon (High)"),
+    ("gemini-4-argon-medium", "Gemini 4 Argon (Medium)"),
+    ("gemini-4-argon-low", "Gemini 4 Argon (Low)"),
+    ("gemini-3.8-flash-high", "Gemini 3.8 Flash (High)"),
+    ("gemini-3.8-flash-medium", "Gemini 3.8 Flash (Medium)"),
+    ("gemini-3.8-flash-low", "Gemini 3.8 Flash (Low)"),
+    ("claude-opus-5-5-high", "Claude Opus 5.5 (High)"),
+    ("claude-opus-5-5-medium", "Claude Opus 5.5 (Medium)"),
+    ("claude-opus-5-5-low", "Claude Opus 5.5 (Low)"),
+    ("claude-sonnet-5-5-high", "Claude Sonnet 5.5 (High)"),
+    ("claude-sonnet-5-5-medium", "Claude Sonnet 5.5 (Medium)"),
+    ("claude-sonnet-5-5-low", "Claude Sonnet 5.5 (Low)"),
+    ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"),
+)
 _ANTIGRAVITY_EFFORTS = ("low", "medium", "high")
 
 # opencode family: ``--variant`` — provider-relative reasoning effort.
@@ -242,10 +257,7 @@ async def _antigravity_options() -> BackendOptions:
         display_name="Antigravity CLI",
         available=ok,
         version=version if ok else "",
-        # `agy models` prints the live list, and the slugs move with the Gemini
-        # releases behind them; naming a stale set here would be worse than
-        # letting the operator paste the one they ran.
-        models=[],
+        models=[BackendModel(name=name, label=label) for name, label in _ANTIGRAVITY_MODELS],
         efforts=list(_ANTIGRAVITY_EFFORTS),
         allow_custom_model=True,
         detail="" if ok else not_found_detail(version, _ANTIGRAVITY_NOT_FOUND),

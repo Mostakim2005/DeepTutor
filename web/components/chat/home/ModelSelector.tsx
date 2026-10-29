@@ -40,7 +40,7 @@ function ModelOptionRow({
   const { t } = useTranslation();
   // Official model ID as the primary label (what gets sent to the API),
   // per design. The user-given nickname and profile live in the tooltip.
-  const modelLabel = option.model || option.model_name;
+  const modelLabel = option.model_name || option.model;
   const contextWindow = formatContextWindow(option.context_window);
   // Long model ids ("google/gemini-3-flash-preview") get ellipsized by the
   // inline layout; hovering the row reveals the full id as an overlay. The
@@ -75,6 +75,11 @@ function ModelOptionRow({
       >
         {modelLabel}
       </span>
+      {option.reasoning_effort && option.reasoning_effort !== "none" && (
+        <span className="shrink-0 rounded bg-[var(--primary)]/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--primary)]">
+          {option.reasoning_effort}
+        </span>
+      )}
       {option.is_active_default && (
         <span className="shrink-0 rounded-full bg-[var(--muted)] px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
           {t("Default")}
@@ -174,8 +179,8 @@ export default function ModelSelector({
         : t("Models unavailable")
       : allowSystemDefault && !selectedSelection
         ? defaultLabel
-        : selectedOption?.model ||
-          selectedOption?.model_name ||
+        : selectedOption?.model_name ||
+          selectedOption?.model ||
           t("Select model");
   const menuPlacementClass =
     placement === "bottom" ? "top-full mt-1.5" : "bottom-full mb-1.5";
