@@ -102,7 +102,11 @@ class SubagentCapability(KnowledgeCapability):
             state["_seeded"] = True
             if not state.get("session_id"):
                 state["session_id"] = get_session(skey)
-        config = _effective_config(settings.backend(conn["kind"]))
+        config = _effective_config(
+            settings.backend(conn["kind"]),
+            override_model=conn.get("model") or "",
+            override_effort=conn.get("effort") or "",
+        )
         # Multimodal: forward the turn's image attachments only when the user
         # opted this backend in (/settings → forward_images). The tool
         # materializes them to files the CLI can ingest.
@@ -150,17 +154,19 @@ _DEFAULT_CONSULT_INSTRUCTION = (
 )
 
 
-def _effective_config(config):
-    """Fill product defaults the user hasn't overridden in /settings.
-
-    Today: a default ``system_prompt`` so the consulted agent knows it's a
-    delegate (applied by backends that support it, e.g. Claude Code).
-    """
-    if config.system_prompt.strip():
-        return config
+def _effective_config(config, override_model: str = "", override_effort: str = ""):
+    """Fill product defaults and allow per-connection model/effort overrides."""
     from dataclasses import replace
 
-    return replace(config, system_prompt=_DEFAULT_CONSULT_INSTRUCTION)
+    updates: dict[str, Any] = {}
+    if not config.system_prompt.strip():
+        updates["system_prompt"] = _DEFAULT_CONSULT_INSTRUCTION
+    if override_model:
+        updates["model"] = override_model
+    if override_effort:
+        updates["effort"] = override_effort
+
+    return replace(config, **updates) if updates else config
 
 
 def _resolve_budget(context: UnifiedContext) -> int:

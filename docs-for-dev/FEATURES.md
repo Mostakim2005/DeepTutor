@@ -7,3 +7,4 @@
 | **Windows Detached Process Launcher** | Spawns background server workers on Windows without console handle leaks | `deeptutor/runtime/launcher.py` | `_python_interpreter()`, lines 45-65 |
 | **Gemini Thinking Parameter Handling** | Normalizes reasoning effort across Gemini models to avoid HTTP 400 on newer releases | `deeptutor/services/llm/reasoning_params.py` | `_MINIMAL_NOT_OFF_PATTERNS`, lines 47-50 |
 | **STEM & EE Capability Tuning** | Tuned Deep Solve iteration rounds (16) and temperature (0.2) for engineering circuit analysis | `data/user/settings/main.yaml`, `data/user/settings/agents.yaml` | `capabilities.solve` |
+| **Subagent Model & Effort Overrides** | Enables per-connection model and reasoning-effort bindings for instant one-click switching in the chat composer | `deeptutor/capabilities/subagent/binding.py`, `deeptutor/capabilities/subagent/capability.py` | `connection_for_turn()`, `_effective_config()` |

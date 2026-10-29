@@ -238,6 +238,9 @@ def build_openai_compatible_reasoning_kwargs(
         semantic_effort = resolved_effort.lower()
         if semantic_effort == "minimum":
             semantic_effort = "minimal"
+        if provider_name == "gemini" and semantic_effort == "minimal" and not _matches(model_name, _MINIMAL_NOT_OFF_PATTERNS.get("gemini", ())):
+            resolved_effort = "none"
+            semantic_effort = "none"
 
     kwargs: dict[str, Any] = {}
     # OpenRouter exposes a provider-neutral reasoning object.  Keep the

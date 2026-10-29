@@ -77,6 +77,8 @@ def _resolve(context: UnifiedContext) -> dict[str, str] | None:
             "kind": kind,
             "cwd": str(meta.get("cwd") or "").strip(),
             "partner_id": str(meta.get("partner_id") or "").strip(),
+            "model": str(meta.get("model") or "").strip(),
+            "effort": str(meta.get("effort") or "").strip(),
         }
     return None
 
