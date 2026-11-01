@@ -49,6 +49,20 @@ def resolve_cli_command(cmd: Sequence[str], *, path: str | None = None) -> list[
     resolved = shutil.which(cmd[0], path=path)
     if resolved:
         return [resolved, *list(cmd[1:])]
+    if os.name == "nt":
+        from pathlib import Path
+
+        extra_paths = [
+            Path.home() / "AppData" / "Local" / "Programs" / "DeepSeek Harness" / "resources" / "runtime" / "cli" / "bin",
+            Path.home() / "AppData" / "Local" / "agy" / "bin",
+            Path.home() / "AppData" / "Roaming" / "npm",
+            Path.home() / ".local" / "bin",
+        ]
+        for ep in extra_paths:
+            for ext in (".cmd", ".bat", ".exe", ""):
+                candidate = ep / f"{cmd[0]}{ext}"
+                if candidate.is_file():
+                    return [str(candidate), *list(cmd[1:])]
     return list(cmd)
 
 

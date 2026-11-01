@@ -26,3 +26,23 @@
 - **Symptom**: Installing CLI apps from the catalog on Windows failed with `ensurepip` error and `error: Git operation failed. cause: Git executable not found`.
 - **RCA**: `_steps` in `installer.py` hardcoded `bin/python` (which is `Scripts/python.exe` on Windows), and `_clean_env` stripped `SystemRoot`, `PATHEXT`, and `COMSPEC`, breaking Windows subprocess invocation of `git.exe`.
 - **Resolution**: Updated `_steps` and `bin_dir`/`executable_path` to handle Windows `Scripts` and file extensions, preserved Windows system environment variables, and enabled `uv` acceleration for rapid venv creation and package installation.
+
+### BUG-006: InferX DeepSeek Flash Endpoint 429 Replica Capacity Failure
+- **Symptom**: Queries sent to InferX failed with `HTTPError: 429 service failure: endpoint deepseek-v4.1-flash-1017-basic all replicas at capacity`.
+- **RCA**: The catalog profile only registered the `-basic` suffix endpoint (`deepseek-v4.1-flash-1017-basic`), which is oversubscribed on InferX. Standard non-basic endpoints (`deepseek-v4.1-flash-1017`, `deepseek-v4.1-flash`, `deepseek-v4-flash-0731`) accept the exact same API key with zero capacity rejections.
+- **Resolution**: Updated `model_catalog.json` to register `deepseek-v4.1-flash-1017`, `deepseek-v4.1-flash`, and `deepseek-v4-flash-0731` under provider profile `inferx`, defaulting traffic to `deepseek-v4.1-flash-1017`.
+
+### BUG-007: Subagent Backend `NameError: name 'BackendModel' is not defined`
+- **Symptom**: Enumerating subagent options via `/api/subagents/options` crashed with `NameError: name 'BackendModel' is not defined` at `deeptutor/services/subagent/models.py:260`.
+- **RCA**: `_antigravity_options()` instantiated `BackendModel` instead of the imported `ModelOption` dataclass.
+- **Resolution**: Replaced `BackendModel(name=name, label=label)` with `ModelOption(slug=name, display_name=label)` in `deeptutor/services/subagent/models.py`.
+
+### BUG-008: DeepSeek Harness CLI (`dsh`) Not Discovered on Windows
+- **Symptom**: DeepSeek Harness backend failed detection with `dsh CLI / Python SDK not found` despite the desktop application being installed.
+- **RCA**: DeepSeek Harness installs `dsh.cmd` at `%LOCALAPPDATA%\Programs\DeepSeek Harness\resources\runtime\cli\bin`, but the Windows installer does not add this path to user PATH by default. Furthermore, running server processes cannot read user PATH changes dynamically.
+- **Resolution**: Added the DeepSeek Harness runtime binary directory to Windows User `PATH` and added fallback search paths in `deeptutor/services/subagent/process.py` (`resolve_cli_command()`) for Windows.
+
+### BUG-009: DeepSeek Harness Headless Mode Missing Credentials & Routing
+- **Symptom**: Executing `dsh --profile headless` returned `MISSING_CREDENTIAL: llm-deepseek: no API key for provider route "deepseek-official"`.
+- **RCA**: Headless profile in DeepSeek Harness disables the local credentials extension (`@deepseek-ai/dsh-credentials-local`) by default and had an empty `cordis.patch.yml`.
+- **Resolution**: Configured `~/.dsh/profiles/headless/cordis.patch.yml` to re-enable local credentials (`disabled: false`) and routed default models to `inferx` / `deepseek-v4.1-flash-1017`.

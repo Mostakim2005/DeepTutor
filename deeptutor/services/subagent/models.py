@@ -257,7 +257,7 @@ async def _antigravity_options() -> BackendOptions:
         display_name="Antigravity CLI",
         available=ok,
         version=version if ok else "",
-        models=[BackendModel(name=name, label=label) for name, label in _ANTIGRAVITY_MODELS],
+        models=[ModelOption(slug=name, display_name=label) for name, label in _ANTIGRAVITY_MODELS],
         efforts=list(_ANTIGRAVITY_EFFORTS),
         allow_custom_model=True,
         detail="" if ok else not_found_detail(version, _ANTIGRAVITY_NOT_FOUND),
