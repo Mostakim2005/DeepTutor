@@ -52,7 +52,7 @@ interface ComposerInputProps {
    * opens an agent picker (the main-chat behavior) instead of the Space menu;
    * surfaces that omit this (e.g. the quiz follow-up) keep the Space menu on @.
    */
-  connectedAgents?: { name: string; kind?: string }[];
+  connectedAgents?: { name: string; displayName?: string; kind?: string; isPinned?: boolean; isHidden?: boolean }[];
   selectedAgent?: string | null;
   onSelectAgent?: (name: string | null) => void;
   onSelectAttach: () => void;

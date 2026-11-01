@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 import logging
 from pathlib import Path
@@ -116,8 +117,29 @@ class CommandCodeBackend(SubagentBackend):
             async for channel, line in stream_process_lines(cmd, cwd=cwd):
                 if channel == "exit":
                     if line != "0" and result.success and not result.final_text:
-                        result.success = False
                         err_detail = " ".join(stderr_lines).strip()
+                        # Automatic effort fallback if model does not support this reasoning effort
+                        if config.effort and any(
+                            phrase in err_detail.lower()
+                            for phrase in ("no adjustable reasoning", "unknown effort", "reasoning effort")
+                        ):
+                            logger.info(
+                                "Command-Code effort '%s' rejected for %s (%s). Falling back to model default...",
+                                config.effort,
+                                config.model,
+                                err_detail,
+                            )
+                            fallback_config = replace(config, effort="")
+                            return await self.consult(
+                                question,
+                                on_event=on_event,
+                                cwd=cwd,
+                                session_id=session_id,
+                                config=fallback_config,
+                                images=images,
+                                partner_id=partner_id,
+                            )
+                        result.success = False
                         result.error = f"cmdc exited with code {line}: {err_detail}" if err_detail else f"cmdc exited with code {line}"
                         await emit(EVENT_ERROR, result.error, {"returncode": line, "stderr": err_detail})
                     continue

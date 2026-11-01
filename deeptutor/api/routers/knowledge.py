@@ -192,6 +192,9 @@ class KnowledgeBaseInfo(BaseModel):
     read_only: bool = False
     provenance_label: str | None = None
     available: bool = True
+    display_name: str | None = None
+    is_pinned: bool = False
+    is_hidden: bool = False
 
 
 class LinkFolderRequest(BaseModel):
@@ -2972,6 +2975,23 @@ def _list_knowledge_bases():
                             provenance_label=str(access.get("provenance_label") or ""),
                         )
                     )
+        try:
+            from deeptutor.services.subagent.model_preferences import load_model_preferences
+
+            prefs = load_model_preferences()
+            disp_map = prefs.get("display_names", {})
+            pinned_set = set(prefs.get("pinned", []))
+            hidden_set = set(prefs.get("hidden", []))
+            for item in result:
+                item.display_name = disp_map.get(item.name, item.name)
+                item.is_pinned = item.name in pinned_set
+                item.is_hidden = item.name in hidden_set
+                if item.metadata is not None:
+                    item.metadata["display_name"] = item.display_name
+                    item.metadata["is_pinned"] = item.is_pinned
+                    item.metadata["is_hidden"] = item.is_hidden
+        except Exception as exc:
+            logger.debug("Failed attaching model preferences to KB list: %s", exc)
         return result
     except HTTPException:
         raise

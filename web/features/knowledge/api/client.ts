@@ -57,6 +57,9 @@ export interface KnowledgeBaseSummary {
   read_only?: boolean;
   provenance_label?: string;
   available?: boolean;
+  display_name?: string;
+  is_pinned?: boolean;
+  is_hidden?: boolean;
 }
 
 export interface RagProviderSummary {

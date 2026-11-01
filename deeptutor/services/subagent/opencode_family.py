@@ -288,6 +288,18 @@ class OpencodeFamilyBackend(SubagentBackend):
                 json={"model": payload},
                 timeout=5.0,
             )
+            if res.status_code >= 400 and "variant" in payload:
+                logger.info(
+                    "OpenCode variant rejected (%s: %s); falling back to default without variant",
+                    res.status_code,
+                    res.text,
+                )
+                payload.pop("variant", None)
+                res = await client.post(
+                    f"/api/session/{sid}/model",
+                    json={"model": payload},
+                    timeout=5.0,
+                )
             logger.debug("opencode model configure status=%s body=%s", res.status_code, res.text)
         except Exception as exc:
             logger.debug("opencode model configure skipped: %s", exc)

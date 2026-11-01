@@ -387,7 +387,10 @@ function StandaloneComposerImpl({
         .filter((kb) => kb.metadata?.type === "subagent" && kb.metadata?.agent_kind !== "partner")
         .map((kb) => ({
           name: kb.name,
+          displayName: (kb.display_name || kb.metadata?.display_name || kb.name) as string,
           kind: kb.metadata?.agent_kind as string | undefined,
+          isPinned: Boolean(kb.is_pinned ?? kb.metadata?.is_pinned),
+          isHidden: Boolean(kb.is_hidden ?? kb.metadata?.is_hidden),
         })),
     [knowledgeBases],
   );

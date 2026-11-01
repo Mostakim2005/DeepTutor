@@ -2501,3 +2501,53 @@ async def get_usage_statistics(
 
     combined = await asyncio.to_thread(combined_usage_records, records, start, end)
     return await asyncio.to_thread(aggregate_usage, combined, year=year, timezone=timezone)
+
+
+# ── Model Preferences ────────────────────────────────────────────────────────
+
+
+class ModelPreferencesPayload(BaseModel):
+    display_names: dict[str, str] = Field(default_factory=dict)
+    pinned: list[str] = Field(default_factory=list)
+    hidden: list[str] = Field(default_factory=list)
+
+
+class TogglePreferenceRequest(BaseModel):
+    name: str
+
+
+@router.get("/model-preferences", response_model=ModelPreferencesPayload)
+async def get_model_preferences():
+    """Retrieve custom model display names, pinned models, and hidden models."""
+    from deeptutor.services.subagent.model_preferences import load_model_preferences
+
+    return load_model_preferences()
+
+
+@router.put("/model-preferences", response_model=ModelPreferencesPayload)
+async def update_model_preferences(payload: ModelPreferencesPayload):
+    """Save custom model display names, pinned models, and hidden models."""
+    from deeptutor.services.subagent.model_preferences import save_model_preferences
+
+    data = payload.model_dump()
+    save_model_preferences(data)
+    return data
+
+
+@router.post("/model-preferences/toggle-pin")
+async def toggle_model_pin(payload: TogglePreferenceRequest):
+    """Toggle whether a model or subagent is pinned."""
+    from deeptutor.services.subagent.model_preferences import toggle_pin
+
+    is_active = toggle_pin(payload.name)
+    return {"name": payload.name, "is_pinned": is_active}
+
+
+@router.post("/model-preferences/toggle-hide")
+async def toggle_model_hide(payload: TogglePreferenceRequest):
+    """Toggle whether a model or subagent is hidden."""
+    from deeptutor.services.subagent.model_preferences import toggle_hide
+
+    is_active = toggle_hide(payload.name)
+    return {"name": payload.name, "is_hidden": is_active}
+

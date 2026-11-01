@@ -374,9 +374,11 @@ class HandoffCapability(TurnCapability):
         backend = get_backend(kind) if kind and kind != "partner" else None
         if backend is None:
             raise HandoffError(f"No agent backend for '{connection}' ({kind or 'unknown'}).")
+        from deeptutor.services.subagent.model_preferences import get_display_name
         name = str(meta.get("name") or connection)
+        display_name = get_display_name(connection) or name
         cwd = str(meta.get("cwd") or "").strip()
-        writer = _Writer(stream, _delegate("subagent", connection, name, agent=kind))
+        writer = _Writer(stream, _delegate("subagent", connection, display_name, agent=kind))
 
         settings = load_subagent_settings()
         config = settings.backend(kind)

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpRight, Bot, MessageCircle, Minus, Plus, UserRound, Users } from "lucide-react";
+import { ArrowUpRight, Bot, ChevronDown, EyeOff, MessageCircle, Minus, Pin, Plus, Star, UserRound, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { agentGlyph, agentKindLabel } from "@/components/agents/agent-icons";
 import PartnerAvatar from "@/components/partners/PartnerAvatar";
@@ -26,7 +26,7 @@ const BUDGET_MIN = 1;
 const BUDGET_MAX = 12;
 const SEARCH_FROM = 9;
 
-type Agent = { name: string; kind?: string };
+type Agent = { name: string; displayName?: string; kind?: string; isPinned?: boolean; isHidden?: boolean };
 
 interface Choice<T> {
   options: T[];
@@ -115,7 +115,7 @@ export default function AnswerModeMenu({
     value = partner?.name ?? id;
   } else if (kind === "subagent") {
     icon = <AgentFace kind={agent?.kind} size={14} />;
-    value = id;
+    value = agent?.displayName || id;
   }
   return (
     <TrayMenu
@@ -141,6 +141,7 @@ function AnswerList({
   const { t } = useTranslation();
   const [personas, setPersonas] = useState<PersonaInfo[]>([]);
   const [query, setQuery] = useState("");
+  const [showHidden, setShowHidden] = useState(false);
   const wantsPersonas = Boolean(persona);
   useEffect(() => {
     if (!wantsPersonas) return;
@@ -160,8 +161,14 @@ function AnswerList({
     !needle || text.join(" ").toLocaleLowerCase().includes(needle);
   const styleRows = personas.filter((item) => matches(item.name, item.description));
   const partnerRows = answerers?.partners.filter((item) => matches(item.name)) ?? [];
-  const agentRows = answerers?.agents.filter((item) => matches(item.name)) ?? [];
-  const total = personas.length + (answerers?.partners.length ?? 0) + (answerers?.agents.length ?? 0);
+  const allAgents = answerers?.agents ?? [];
+  const matchingAgents = allAgents.filter((item) => matches(item.displayName, item.name));
+  const pinnedAgents = matchingAgents.filter((item) => item.isPinned && !item.isHidden);
+  const normalAgents = matchingAgents.filter((item) => !item.isPinned && !item.isHidden);
+  const hiddenAgents = matchingAgents.filter((item) => item.isHidden);
+  const visibleAgents = needle ? matchingAgents : [...pinnedAgents, ...normalAgents];
+  const agentRows = visibleAgents;
+  const total = personas.length + (answerers?.partners.length ?? 0) + matchingAgents.length;
   const pick = (value: string | null) => {
     answerers?.onChange(value);
     close();
@@ -224,16 +231,53 @@ function AnswerList({
                 meta={item.description || undefined}
               />
             ))}
-            {agentRows.map((item) => (
+            {visibleAgents.map((item) => (
               <TrayOption
                 key={`subagent:${item.name}`}
                 selected={answerers.value === `subagent:${item.name}`}
                 onSelect={() => pick(`subagent:${item.name}`)}
                 leading={<AgentFace kind={item.kind} size={15} />}
-                title={item.name}
+                title={
+                  <span className="flex items-center gap-1.5">
+                    <span>{item.displayName || item.name}</span>
+                    {item.isPinned && (
+                      <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" aria-label={t("Pinned")} />
+                    )}
+                  </span>
+                }
                 meta={agentKindLabel(item.kind) || undefined}
               />
             ))}
+            {!needle && hiddenAgents.length > 0 && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowHidden((prev) => !prev)}
+                  className="flex items-center justify-between w-full px-2.5 py-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--hover-bg,rgba(0,0,0,0.04))] rounded-md transition-colors"
+                >
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <EyeOff size={13} strokeWidth={1.8} />
+                    {showHidden ? t("Hide hidden models") : `${t("Hidden models")} (${hiddenAgents.length})`}
+                  </span>
+                  <ChevronDown
+                    size={13}
+                    strokeWidth={1.8}
+                    className={`transition-transform duration-200 ${showHidden ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {showHidden &&
+                  hiddenAgents.map((item) => (
+                    <TrayOption
+                      key={`subagent:${item.name}`}
+                      selected={answerers.value === `subagent:${item.name}`}
+                      onSelect={() => pick(`subagent:${item.name}`)}
+                      leading={<AgentFace kind={item.kind} size={15} />}
+                      title={item.displayName || item.name}
+                      meta={agentKindLabel(item.kind) || undefined}
+                    />
+                  ))}
+              </div>
+            )}
             {answerers.loading && <p className="dt-tray-empty">{t("Loading...")}</p>}
             {answerers.error && !answerers.loading && (
               <p role="alert" className="dt-tray-empty">
@@ -287,7 +331,7 @@ export function PartnerLinkMenu({
     value = group?.name ?? groups.selected;
   } else if (agents?.selected) {
     icon = <AgentFace kind={agent?.kind} size={14} />;
-    value = agents.selected;
+    value = agent?.displayName || agents.selected;
   }
   return (
     <TrayMenu
@@ -310,11 +354,17 @@ function PartnerLinkList({
   close,
 }: PartnerLinkProps & { close: () => void }) {
   const { t } = useTranslation();
+  const [showHiddenAgents, setShowHiddenAgents] = useState(false);
   const reuse: ResourceKind[] = [
     ...(partners ? (["partner"] as const) : []),
     ...(groups ? (["partner_group"] as const) : []),
     ...(agents ? (["agent"] as const) : []),
   ];
+  const allAgents = agents?.options ?? [];
+  const pinnedAgents = allAgents.filter((item) => item.isPinned && !item.isHidden);
+  const normalAgents = allAgents.filter((item) => !item.isPinned && !item.isHidden);
+  const hiddenAgents = allAgents.filter((item) => item.isHidden);
+  const visibleAgents = [...pinnedAgents, ...normalAgents];
   const nothing = !partners?.options.length && !groups?.options.length && !agents?.options.length;
   const loading = Boolean(partners?.loading || groups?.loading);
   const failed = Boolean(partners?.error || groups?.error);
@@ -363,7 +413,7 @@ function PartnerLinkList({
         )}
         {agents && agents.options.length > 0 && (
           <TraySection title={t("Ask subagent")} hint={t("composer.tray.askAgentHint")}>
-            {agents.options.map((item) => {
+            {visibleAgents.map((item) => {
               const chosen = agents.selected === item.name;
               return (
                 <div key={item.name}>
@@ -371,11 +421,17 @@ function PartnerLinkList({
                     selected={chosen}
                     onSelect={() => {
                       agents.onSelect(chosen ? null : item.name);
-                      // Stay open on a new pick so its round limit can be set.
                       if (chosen || !agents.onBudgetChange) close();
                     }}
                     leading={<AgentFace kind={item.kind} size={15} />}
-                    title={item.name}
+                    title={
+                      <span className="flex items-center gap-1.5">
+                        <span>{item.displayName || item.name}</span>
+                        {item.isPinned && (
+                          <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" aria-label={t("Pinned")} />
+                        )}
+                      </span>
+                    }
                     meta={agentKindLabel(item.kind) || undefined}
                   />
                   {chosen && agents.onBudgetChange && (
@@ -384,6 +440,46 @@ function PartnerLinkList({
                 </div>
               );
             })}
+            {hiddenAgents.length > 0 && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowHiddenAgents((prev) => !prev)}
+                  className="flex items-center justify-between w-full px-2.5 py-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--hover-bg,rgba(0,0,0,0.04))] rounded-md transition-colors"
+                >
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <EyeOff size={13} strokeWidth={1.8} />
+                    {showHiddenAgents ? t("Hide hidden models") : `${t("Hidden models")} (${hiddenAgents.length})`}
+                  </span>
+                  <ChevronDown
+                    size={13}
+                    strokeWidth={1.8}
+                    className={`transition-transform duration-200 ${showHiddenAgents ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {showHiddenAgents &&
+                  hiddenAgents.map((item) => {
+                    const chosen = agents.selected === item.name;
+                    return (
+                      <div key={item.name}>
+                        <TrayOption
+                          selected={chosen}
+                          onSelect={() => {
+                            agents.onSelect(chosen ? null : item.name);
+                            if (chosen || !agents.onBudgetChange) close();
+                          }}
+                          leading={<AgentFace kind={item.kind} size={15} />}
+                          title={item.displayName || item.name}
+                          meta={agentKindLabel(item.kind) || undefined}
+                        />
+                        {chosen && agents.onBudgetChange && (
+                          <Budget value={agents.budget ?? null} onChange={agents.onBudgetChange} />
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </TraySection>
         )}
         {loading && <p className="dt-tray-empty">{t("Loading...")}</p>}

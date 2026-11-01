@@ -247,12 +247,18 @@ const ResearchConfigPanel = dynamic(
 interface KnowledgeBase {
   name: string;
   is_default?: boolean;
+  display_name?: string;
+  is_pinned?: boolean;
+  is_hidden?: boolean;
   metadata?: {
     /** Connected-source kind, e.g. "obsidian" | "subagent". */
     type?: string;
     /** Backend of a connected subagent: "claude_code" | "codex" | "partner". */
     agent_kind?: string;
     rag_provider?: string;
+    display_name?: string;
+    is_pinned?: boolean;
+    is_hidden?: boolean;
   };
   statistics?: {
     rag_provider?: string;
@@ -2257,7 +2263,13 @@ export default function ChatWorkspace() {
     () =>
       knowledgeBases
         .filter((kb) => kb.metadata?.type === "subagent" && kb.metadata?.agent_kind !== "partner")
-        .map((kb) => ({ name: kb.name, kind: kb.metadata?.agent_kind })),
+        .map((kb) => ({
+          name: kb.name,
+          displayName: (kb.display_name || kb.metadata?.display_name || kb.name) as string,
+          kind: kb.metadata?.agent_kind,
+          isPinned: Boolean(kb.is_pinned ?? kb.metadata?.is_pinned),
+          isHidden: Boolean(kb.is_hidden ?? kb.metadata?.is_hidden),
+        })),
     [knowledgeBases],
   );
   const selectedKbOnly = useMemo(

@@ -71,3 +71,8 @@
 - **Symptom**: Selecting specific subagent models in the Preferences dropdown always routed to the global backend model rather than the selected option.
 - **RCA**: `_subagent()` in `deeptutor/capabilities/handoff/capability.py` loaded `config = settings.backend(kind)` without overriding `model` and `effort` from the resolved KB metadata.
 - **Resolution**: Updated `_subagent()` to apply `meta.get("model")` and `meta.get("effort")` onto the effective `BackendConfig`, enabled `variant` payload support in `opencode_family.py` for models supporting reasoning variants, and added dedicated KB entries for OpenCode and Command Code models.
+
+### BUG-015: Subagent CLI/API Rejection on Models Without Reasoning Effort
+- **Symptom**: Calling models without adjustable reasoning effort (e.g. `xiaomi/mimo-v2.6-pro` via Command Code or `opencode/mimo-v2.6-flash-free` via OpenCode) when effort was configured failed with exit code 1 (`MiMo V2.6 Pro has no adjustable reasoning effort.`) or HTTP 400 (`Variant unavailable`).
+- **RCA**: Different providers enforce strict rejection rather than ignoring unneeded reasoning parameters: `cmdc` aborts with non-zero exit code if `--effort` is passed to models lacking adjustable reasoning, and OpenCode returns 400 when an invalid `variant` is specified.
+- **Resolution**: Added universal automatic reasoning effort fallback in `command_code.py` (catching effort rejection in stderr and immediately retrying with `effort=""`) and in `opencode_family.py` (retrying session model configuration without `variant` when rejected).

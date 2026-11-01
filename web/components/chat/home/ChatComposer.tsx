@@ -327,8 +327,8 @@ export default memo(function ChatComposer({
   attachmentProcessing?: AttachmentProcessingItem[];
   activeCap: CapabilityDef;
   knowledgeBases: KnowledgeBase[];
-  /** Connected local subagents (Claude Code / Codex) selectable for this turn. */
-  connectedAgents?: { name: string; kind?: string }[];
+  /** Connected local subagents selectable for this turn. */
+  connectedAgents?: { name: string; displayName?: string; kind?: string; isPinned?: boolean; isHidden?: boolean }[];
   /** The connected agent selected for this turn, if any (single-select). */
   selectedPartner?: string | null;
   onSelectPartner?: (id: string | null) => void;
