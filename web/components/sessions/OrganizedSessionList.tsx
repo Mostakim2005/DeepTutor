@@ -1,17 +1,19 @@
 "use client";
 
 import Tooltip from "@/shared/ui/Tooltip";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ChevronDown,
   ChevronRight,
+  Download,
   MessagesSquare,
   MoreHorizontal,
   Unlink,
   Pin,
   RotateCcw,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useTranslation } from "react-i18next";
 import {
   deriveSessionMark,
@@ -25,11 +27,20 @@ import { useUnreadSessions } from "@/lib/session-unread";
 import type { ChatWorkspaceRegistration } from "@/lib/workspaces-api";
 import type { MasteryTopicLabel } from "@/lib/learning-api";
 import type { ReadingCollectionLabel } from "@/lib/reading-workspace-api";
-import type {
-  SessionOrganizationPatch,
-  SessionSummary,
+import {
+  getSession,
+  sessionWorkspaceId,
+  type SessionMessage,
+  type SessionOrganizationPatch,
+  type SessionSummary,
 } from "@/lib/session-api";
-import { sessionWorkspaceId } from "@/lib/session-api";
+
+const ExportChatModal = dynamic(
+  () => import("@/features/export/ExportChatModal"),
+  {
+    ssr: false,
+  },
+);
 import { organizeSessionTree } from "@/lib/session-organization";
 import { matches } from "@/components/sidebar/NavigationPrimitives";
 import {
@@ -145,6 +156,35 @@ export default function OrganizedSessionList({
   const [workspaceMoveError, setWorkspaceMoveError] = useState("");
   const [movingWorkspace, setMovingWorkspace] = useState(false);
   const [groupLimits, setGroupLimits] = useState<Record<string, number>>({});
+  const [exportModalState, setExportModalState] = useState<{
+    open: boolean;
+    messages: SessionMessage[];
+    title: string;
+    workspaceId?: string;
+    sessionId?: string;
+  }>({ open: false, messages: [], title: "" });
+
+  const handleExportSession = useCallback(
+    async (sessionId: string, sessionTitle: string, wsId?: string) => {
+      try {
+        const detail = await getSession(sessionId);
+        if (!detail.messages?.length) {
+          notify(t("This chat has no messages to export"), { tone: "info" });
+          return;
+        }
+        setExportModalState({
+          open: true,
+          messages: detail.messages,
+          title: sessionTitle || detail.title || "Chat Session",
+          workspaceId: wsId,
+          sessionId,
+        });
+      } catch {
+        notify(t("Failed to load conversation for export"), { tone: "error" });
+      }
+    },
+    [t],
+  );
   const moveToWorkspace = async (sessionId: string, workspaceId: string | null) => {
     if (movingWorkspace) return;
     setMovingWorkspace(true);
@@ -512,21 +552,36 @@ export default function OrganizedSessionList({
                     setMenuPosition(null);
                   }}
                   extra={
-                    taskLinks?.task_ids.length ? (
+                    <>
+                      {taskLinks?.task_ids.length ? (
+                        <SessionMenuItem
+                          icon={Unlink}
+                          label={t(taskLinks.status_link_enabled ? "tasks.unlinkStatus" : "tasks.linkStatus")}
+                          onClick={() => {
+                            void setTaskStatusLink(
+                              session.session_id,
+                              sessionWorkspaceId(session),
+                              !taskLinks.status_link_enabled,
+                            ).catch(() => notify(t("tasks.saveError"), { tone: "error" }));
+                            setOpenMenuId(null);
+                            setMenuPosition(null);
+                          }}
+                        />
+                      ) : null}
                       <SessionMenuItem
-                        icon={Unlink}
-                        label={t(taskLinks.status_link_enabled ? "tasks.unlinkStatus" : "tasks.linkStatus")}
+                        icon={Download}
+                        label={t("Export chat")}
                         onClick={() => {
-                          void setTaskStatusLink(
-                            session.session_id,
-                            sessionWorkspaceId(session),
-                            !taskLinks.status_link_enabled,
-                          ).catch(() => notify(t("tasks.saveError"), { tone: "error" }));
                           setOpenMenuId(null);
                           setMenuPosition(null);
+                          void handleExportSession(
+                            session.session_id,
+                            session.title,
+                            sessionWorkspaceId(session),
+                          );
                         }}
                       />
-                    ) : null
+                    </>
                   }
                   footer={
                     onResetOrder && (manualOrder?.length ?? 0) > 0 ? (
@@ -693,6 +748,14 @@ export default function OrganizedSessionList({
             </p>
           }
         />
+        <ExportChatModal
+          open={exportModalState.open}
+          onClose={() => setExportModalState((prev) => ({ ...prev, open: false }))}
+          messages={exportModalState.messages}
+          title={exportModalState.title}
+          workspaceId={exportModalState.workspaceId}
+          sessionId={exportModalState.sessionId}
+        />
       </div>
     );
   }
@@ -705,7 +768,14 @@ export default function OrganizedSessionList({
           ? renderGroup(entry)
           : renderSortableRow(entry.session),
       )}
-
+      <ExportChatModal
+        open={exportModalState.open}
+        onClose={() => setExportModalState((prev) => ({ ...prev, open: false }))}
+        messages={exportModalState.messages}
+        title={exportModalState.title}
+        workspaceId={exportModalState.workspaceId}
+        sessionId={exportModalState.sessionId}
+      />
     </div>
   );
 }

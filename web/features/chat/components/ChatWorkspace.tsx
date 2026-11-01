@@ -214,6 +214,12 @@ const SaveToNotebookModal = dynamic(
     ssr: false,
   },
 );
+const ExportChatModal = dynamic(
+  () => import("@/features/export/ExportChatModal"),
+  {
+    ssr: false,
+  },
+);
 // Activity-panel config card hosts the capability-specific form (Quiz /
 // Animator / Visualize / Research). Lazy-loaded so capabilities that
 // don't need a form (Chat / Solve) don't ship the form JS.
@@ -2448,6 +2454,12 @@ export default function ChatWorkspace() {
     setShowSaveModal(false);
   }, []);
 
+  const [showExportModal, setShowExportModal] = useState(false);
+  const handleOpenExportModal = useCallback(() => {
+    if (!state.messages.length) return;
+    setShowExportModal(true);
+  }, [state.messages.length]);
+
   const handleDownloadMarkdown = useCallback(() => {
     if (!state.messages.length) return;
     const title =
@@ -2595,7 +2607,7 @@ export default function ChatWorkspace() {
                   canSave={Boolean(chatSavePayload)}
                   onSave={() => setShowSaveModal(true)}
                   canExport={state.messages.length > 0}
-                  onExport={handleDownloadMarkdown}
+                  onExport={handleOpenExportModal}
                   onRename={startSessionTitleEdit}
                   onOrganized={applySessionOrganization}
                   onMoved={handleSessionMoved}
@@ -2988,6 +3000,15 @@ export default function ChatWorkspace() {
               payload={chatSavePayload}
               messages={chatSaveMessages}
               onClose={handleCloseSaveModal}
+            />
+            <ExportChatModal
+              open={showExportModal}
+              onClose={() => setShowExportModal(false)}
+              messages={state.messages}
+              title={displaySessionTitle}
+              workspaceId={sessionStoreId}
+              workspaceName={workspaces.find((w) => w.workspace_id === sessionStoreId)?.display_name}
+              sessionId={state.sessionId ?? undefined}
             />
             <FilePreviewDrawer
               open={previewSource !== null}

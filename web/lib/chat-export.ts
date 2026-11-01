@@ -89,3 +89,6 @@ export function downloadChatMarkdown(
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
+// Re-export advanced multi-format export engines & types
+export * from "./export";
