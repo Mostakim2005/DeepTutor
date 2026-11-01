@@ -41,6 +41,7 @@ from deeptutor.api.routers.auth import require_admin
 from deeptutor.api.utils.progress_broadcaster import ProgressBroadcaster
 from deeptutor.api.utils.task_id_manager import TaskIDManager
 from deeptutor.api.utils.task_log_stream import capture_task_logs, get_task_stream_manager
+from deeptutor.core.errors import AccessError
 from deeptutor.knowledge.add_documents import (
     DocumentAdder,
     hashes_for_indexed_files,
@@ -1768,7 +1769,7 @@ async def update_lightrag_pipeline_config(payload: LightRagConfigUpdate):
         return service.save_lightrag(candidate)
     except (ValueError, PermissionError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Error updating LightRAG config: {e}")
@@ -2018,7 +2019,7 @@ async def set_rag_active_model(payload: ActiveModelUpdate):
         svc["active_model_id"] = payload.model_id
         service.apply(catalog)
         return _model_options_payload([payload.kind])[payload.kind]
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Error setting active model: {e}")
@@ -2130,7 +2131,7 @@ async def update_kb_config(kb_name: str, config: dict):
 
         service.set_kb_config(kb_name, config)
         return {"status": "success", "kb_name": kb_name, "config": service.get_kb_config(kb_name)}
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Error updating config for KB '{kb_name}': {e}")
@@ -2175,7 +2176,7 @@ async def set_default_kb(kb_name: str):
 
         manager.set_default(kb_name)
         return {"status": "success", "default_kb": kb_name}
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Error setting default KB: {e}")
@@ -2207,7 +2208,7 @@ async def connect_obsidian_vault(payload: ConnectObsidianRequest):
     except ValueError as e:
         # Missing/invalid path, disallowed location, or a name clash → 400.
         raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Error connecting Obsidian vault: {e}")
@@ -2315,7 +2316,7 @@ async def connect_linked_folder_route(payload: ConnectFolderRequest):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Error connecting linked folder: {e}")
@@ -2425,7 +2426,7 @@ async def connect_lightrag_server_route(payload: ConnectLightRagServerRequest):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Error connecting LightRAG server: {e}")
@@ -2494,7 +2495,7 @@ async def connect_weknora_route(payload: ConnectWeKnoraRequest):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Error connecting WeKnora knowledge base: {e}")
@@ -2744,7 +2745,7 @@ async def connect_ima_route(payload: ConnectImaRequest):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as exc:
         # Never echo or log an upstream message from this credential-bearing
@@ -2993,7 +2994,7 @@ def _list_knowledge_bases():
         except Exception as exc:
             logger.debug("Failed attaching model preferences to KB list: %s", exc)
         return result
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         error_msg = f"Error listing knowledge bases: {e}"
@@ -3034,9 +3035,9 @@ async def get_knowledge_base_details(kb_name: str):
         if resource.assigned:
             info.pop("path", None)
         return info
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
@@ -3360,7 +3361,7 @@ def _delete_kb(kb_name: str) -> dict[str, str]:
     try:
         manager, resolved_name, _ = _writable_kb(kb_name)
         success = manager.delete_knowledge_base(resolved_name, confirm=True)
-    except HTTPException:
+    except (HTTPException, AccessError):
         # Re-raised before the catch-all below, which used to turn a 404 from
         # ``_writable_kb`` into a 500 whose detail read "404: ... not found".
         raise
@@ -3521,7 +3522,7 @@ async def upload_files(
             "files": uploaded_files,
             "task_id": task_id,
         }
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
@@ -3814,7 +3815,7 @@ async def _create_knowledge_base_owned(
             "task_id": task_id,
         }
 
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Failed to create KB: {e}")
@@ -4294,7 +4295,7 @@ async def reindex_knowledge_base(
             "signature": signature_hash,
             "noop": False,
         }
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Failed to start reindex for '{kb_name}': {e}")
@@ -4343,7 +4344,7 @@ async def retry_knowledge_base(
         return await reindex_knowledge_base(
             kb_name, background_tasks, indexing_llm="", config_fingerprint="", embedding_model=""
         )
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         logger.error(f"Failed to retry KB '{kb_name}': {e}")
@@ -4415,7 +4416,7 @@ async def get_progress(kb_name: str):
             return {"status": "not_started", "message": "Initialization not started"}
 
         return progress
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -4429,7 +4430,7 @@ async def clear_progress(kb_name: str):
         progress_tracker = ProgressTracker(resolved_name, base_dir)
         progress_tracker.clear()
         return {"status": "success", "message": f"Progress cleared for {kb_name}"}
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -4755,7 +4756,7 @@ async def link_folder(kb_name: str, request: LinkFolderRequest):
         folder_info = manager.link_folder(resolved_name, request.folder_path)
         logger.info(f"Linked folder '{request.folder_path}' to KB '{kb_name}'")
         return LinkedFolderInfo(**folder_info)
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except ValueError as e:
         error_msg = str(e)
@@ -4774,7 +4775,7 @@ async def get_linked_folders(kb_name: str):
         manager = manager_for_resource(resource)
         folders = manager.get_linked_folders(resource.name)
         return [LinkedFolderInfo(**f) for f in folders]
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
@@ -4793,7 +4794,7 @@ async def unlink_folder(kb_name: str, folder_id: str):
             raise HTTPException(status_code=404, detail=f"Folder '{folder_id}' not found")
         logger.info(f"Unlinked folder '{folder_id}' from KB '{kb_name}'")
         return {"message": "Folder unlinked successfully", "folder_id": folder_id}
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
@@ -4890,7 +4891,7 @@ async def sync_folder(kb_name: str, folder_id: str, background_tasks: Background
             file_count=len(files_to_process),
             task_id=task_id,
         )
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_name}' not found")
@@ -4977,7 +4978,7 @@ def _knowledge_source_errors(kb_name: str, *, validation_status: int = 404):
     """Translate source-service failures without duplicating route ladders."""
     try:
         yield
-    except HTTPException:
+    except (HTTPException, AccessError):
         raise
     except ValueError as exc:
         detail = str(exc)

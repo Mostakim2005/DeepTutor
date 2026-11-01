@@ -113,3 +113,15 @@ see the dedicated engine jobs in [Testing](TESTING.md).
 ### Reasoning Parameter Resolution
 - Resolved in `deeptutor/services/llm/reasoning_params.py` and `deeptutor/services/model_selection/reasoning.py`.
 - Formats `reasoning_effort` vs `extra_body` thinking flags cleanly across OpenAI, Anthropic, DeepSeek, and Gemini models.
+
+### Multi-Format Conversation Export System & Update Resilience
+- Located in `web/lib/export/` (document builders) and `web/features/export/` (UI modal).
+- Pure TypeScript zero-dependency document generation:
+  - **Word (.docx)**: OOXML ZIP container with `[Content_Types].xml`, `word/document.xml`, native table borders/shading, syntax-styled code blocks, and MathML to Word OMML conversion for editable equations.
+  - **Excel (.xlsx)**: OpenXML spreadsheet package with conversation chronology on Sheet 1 ("Conversation Log") and dedicated auto-named sheets for extracted markdown data tables.
+  - **Standalone HTML**: Self-contained single-file HTML document featuring KaTeX math styling, code highlighting, responsive design, and light/dark theme switching.
+  - **Vector PDF**: Client-side document pagination via `jspdf` with header/footer page numbers and tabular layouts.
+  - **Markdown, JSON, Text**: Clean Obsidian/GitHub compatible notes with YAML frontmatter, collapsed `<details>` blocks for reasoning and tool traces, and structured JSON dumps.
+- Granular element filtering: prompts, thinking traces, tool invocations, tool outputs, citations, artifacts, and data tables.
+- Granular message selection: batch filters (All, None, Only Questions, Only Answers, Invert), individual checkbox selection, Shift+Click multi-select ranges, and per-message snippet preview expanders.
+- Update resilience: Kept in isolated directory paths (`web/lib/export/`, `web/features/export/`) and localized via `web/locales/en/app.json` mapping `"Download Markdown": "Export"`. Upstream merges leave export logic and menu aliases intact.
