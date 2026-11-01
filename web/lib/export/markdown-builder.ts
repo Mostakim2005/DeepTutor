@@ -41,10 +41,12 @@ export function buildMarkdownString(
     }
 
     const isUser = msg.role === "user";
-    const speaker = msg.speaker || (isUser ? "User" : "DeepTutor");
-    const cap = msg.capability ? ` _(${msg.capability})_` : "";
-
-    parts.push(`## ${speaker}${cap}\n`);
+    if (isUser) {
+      parts.push(`### 👤 You\n`);
+    } else {
+      const badge = msg.model ? ` _(${msg.model})_` : (msg.capability ? ` _(${msg.capability})_` : "");
+      parts.push(`### 🤖 DeepTutor${badge}\n`);
+    }
 
     // Thinking
     if (options.includeThinking && msg.thinking?.trim()) {

@@ -112,17 +112,26 @@ function paragraph(content: string, style?: string): string {
 
 function codeBlock(code: string, language?: string): string {
   const lines = code.split("\n");
-  const paragraphs = lines.map((line) => {
+  const langLabel = (language || "CODE").toUpperCase();
+  const BORDER_BOX = '<w:pBdr><w:left w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/><w:right w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/></w:pBdr>';
+  const SHADING = '<w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>';
+  const INDENT = '<w:ind w:left="140" w:right="140"/>';
+
+  const header = `<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="6" w:space="4" w:color="D0D7DE"/><w:left w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/><w:right w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/><w:bottom w:val="single" w:sz="4" w:space="4" w:color="D0D7DE"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="EAEEF2"/>${INDENT}<w:spacing w:before="140" w:after="20"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:b/><w:sz w:val="16"/><w:color w:val="57606A"/></w:rPr><w:t>${escapeXml(langLabel)}</w:t></w:r></w:p>`;
+
+  const paragraphs = lines.map((line, idx) => {
+    const isLast = idx === lines.length - 1;
+    const borderBottom = isLast
+      ? '<w:bottom w:val="single" w:sz="6" w:space="4" w:color="D0D7DE"/>'
+      : '<w:bottom w:val="none"/>';
     return (
-      `<w:p><w:pPr><w:pStyle w:val="Code"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>` +
-      `<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="19"/></w:rPr>` +
+      `<w:p><w:pPr><w:pBdr><w:left w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/><w:right w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/>${borderBottom}</w:pBdr>${SHADING}${INDENT}<w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>` +
+      `<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="18"/><w:color w:val="24292F"/></w:rPr>` +
       `<w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`
     );
   });
-  const header = language
-    ? `<w:p><w:pPr><w:pStyle w:val="CodeHeader"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Consolas"/><w:b/><w:sz w:val="17"/><w:color w:val="57606A"/></w:rPr><w:t>${escapeXml(language.toUpperCase())}</w:t></w:r></w:p>`
-    : "";
-  return header + paragraphs.join("");
+
+  return header + paragraphs.join("") + `<w:p><w:pPr><w:spacing w:after="100"/></w:pPr></w:p>`;
 }
 
 function wordTable(headers: string[], rows: string[][]): string {
@@ -130,32 +139,31 @@ function wordTable(headers: string[], rows: string[][]): string {
   const CELL_MAR = '<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
 
   const headerXml = headers.length
-    ? `<w:tr><w:trPr><w:tblHeader/></w:trPr>${headers
+    ? `<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>${headers
         .map(
           (h) =>
-            `<w:tc><w:tcPr>${BORDER}<w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>${CELL_MAR}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>${escapeXml(h)}</w:t></w:r></w:p></w:tc>`,
+            `<w:tc><w:tcPr>${BORDER}<w:shd w:val="clear" w:color="auto" w:fill="EAEEF2"/>${CELL_MAR}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F2328"/><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(h)}</w:t></w:r></w:p></w:tc>`,
         )
         .join("")}</w:tr>`
     : "";
 
   const rowsXml = rows
-    .map(
-      (row) =>
-        `<w:tr>${row
-          .map(
-            (c) =>
-              `<w:tc><w:tcPr>${BORDER}${CELL_MAR}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:t>${escapeXml(c)}</w:t></w:r></w:p></w:tc>`,
-          )
-          .join("")}</w:tr>`,
-    )
+    .map((row, rIdx) => {
+      const fill = rIdx % 2 === 1 ? "F8F9FA" : "FFFFFF";
+      return `<w:tr><w:trPr><w:cantSplit/></w:trPr>${row
+        .map(
+          (c) =>
+            `<w:tc><w:tcPr>${BORDER}<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>${CELL_MAR}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:sz w:val="19"/><w:color w:val="24292F"/></w:rPr><w:t>${escapeXml(c)}</w:t></w:r></w:p></w:tc>`,
+        )
+        .join("")}</w:tr>`;
+    })
     .join("");
 
   return (
-    '<w:tbl><w:tblPr><w:tblStyle w:val="TableNormal"/><w:tblW w:w="0" w:type="auto"/><w:tblLook w:val="04A0"/></w:tblPr>' +
+    `<w:tbl><w:tblPr><w:tblStyle w:val="TableNormal"/><w:tblW w:w="0" w:type="auto"/><w:tblLook w:val="04A0"/><w:tblLayout w:type="fixed"/></w:tblPr>` +
     headerXml +
     rowsXml +
-    "</w:tbl>" +
-    paragraph("")
+    `</w:tbl><w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>`
   );
 }
 
@@ -168,7 +176,7 @@ export async function buildDocxBlob(
 
   // Document Title
   bodyXml.push(
-    `<w:p><w:pPr><w:pStyle w:val="Title"/><w:spacing w:before="0" w:after="160"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="48"/></w:rPr><w:t>${escapeXml(metadata.title || "DeepTutor Conversation")}</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:pStyle w:val="Title"/><w:spacing w:before="0" w:after="160"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="48"/><w:color w:val="1F2328"/></w:rPr><w:t>${escapeXml(metadata.title || "DeepTutor Conversation")}</w:t></w:r></w:p>`,
   );
 
   // Document Subtitle / Metadata
@@ -182,29 +190,73 @@ export async function buildDocxBlob(
     .join(" · ");
 
   bodyXml.push(
-    `<w:p><w:pPr><w:pStyle w:val="Subtitle"/><w:spacing w:after="320"/></w:pPr><w:r><w:rPr><w:color w:val="656D76"/><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(subMeta)}</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:pStyle w:val="Subtitle"/><w:spacing w:after="240"/></w:pPr><w:r><w:rPr><w:color w:val="656D76"/><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(subMeta)}</w:t></w:r></w:p>`,
   );
 
-  // Divider
+  // Table of Contents Page
   bodyXml.push(
-    '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="8" w:space="1" w:color="D0D7DE"/></w:pBdr><w:spacing w:after="240"/></w:pPr></w:p>',
+    `<w:p><w:pPr><w:pStyle w:val="TOCHeading"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1F2328"/></w:rPr><w:t>Table of Contents</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:spacing w:after="200"/></w:pPr><w:fldSimple w:instr="TOC \\o &quot;1-2&quot; \\h \\z \\u"><w:r><w:rPr><w:color w:val="0969DA"/><w:sz w:val="20"/></w:rPr><w:t>Table of Contents</w:t></w:r></w:fldSimple></w:p>`,
+    `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`,
   );
 
-  for (const msg of messages) {
+  let questionIndex = 0;
+
+  for (let mIdx = 0; mIdx < messages.length; mIdx++) {
+    const msg = messages[mIdx];
     if (msg.role === "user" && !options.includeUserPrompts) {
       continue;
     }
 
     const isUser = msg.role === "user";
-    const speakerLabel = msg.speaker || (isUser ? "User" : "DeepTutor");
     const capBadge = msg.capability ? ` (${msg.capability})` : "";
-    const roleColor = isUser ? "1F5BC7" : "8250DF";
+    const turnBookmark = `turn_${mIdx + 1}`;
 
-    // Role Header
-    bodyXml.push(
-      `<w:p><w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="240" w:after="100"/></w:pPr>` +
-        `<w:r><w:rPr><w:b/><w:color w:val="${roleColor}"/><w:sz w:val="26"/></w:rPr><w:t>${escapeXml(speakerLabel + capBadge)}</w:t></w:r></w:p>`,
-    );
+    if (isUser) {
+      questionIndex++;
+      const snippet = msg.content.trim().slice(0, 80).replace(/[\r\n]+/g, " ");
+      const tocHeading = `Question ${questionIndex}: ${snippet}${msg.content.length > 80 ? "…" : ""}`;
+
+      // Navigation Pane Heading 1 anchor
+      bodyXml.push(
+        `<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="240" w:after="60"/></w:pPr>` +
+          `<w:bookmarkStart w:id="${questionIndex}" w:name="${turnBookmark}"/>` +
+          `<w:r><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="0969DA"/></w:rPr><w:t>${escapeXml(tocHeading)}</w:t></w:r>` +
+          `<w:bookmarkEnd w:id="${questionIndex}"/></w:p>`,
+      );
+
+      // Clean User Callout Card (Shaded container, no redundant "User Answer")
+      const userLines = msg.content.trim().split("\n");
+      const BORDER_LEFT = '<w:pBdr><w:left w:val="single" w:sz="24" w:space="12" w:color="0969DA"/><w:top w:val="none"/><w:right w:val="none"/><w:bottom w:val="none"/></w:pBdr>';
+      const SHADING = '<w:shd w:val="clear" w:color="auto" w:fill="F0F6FF"/>';
+      const INDENT = '<w:ind w:left="180" w:right="180"/>';
+
+      bodyXml.push(
+        `<w:p><w:pPr>${BORDER_LEFT}${SHADING}${INDENT}<w:spacing w:before="80" w:after="40"/></w:pPr>` +
+          `<w:r><w:rPr><w:b/><w:sz w:val="17"/><w:color w:val="0969DA"/></w:rPr><w:t>YOU</w:t></w:r></w:p>`,
+      );
+
+      for (const line of userLines) {
+        if (!line.trim()) continue;
+        bodyXml.push(
+          `<w:p><w:pPr>${BORDER_LEFT}${SHADING}${INDENT}<w:spacing w:after="60"/></w:pPr>` +
+            parseInlineToWord(line) +
+            `</w:p>`,
+        );
+      }
+      bodyXml.push(`<w:p><w:pPr><w:spacing w:after="140"/></w:pPr></w:p>`);
+    } else {
+      // Assistant Response Header
+      const assistantBadge = msg.model ? ` · ${msg.model}` : capBadge;
+      bodyXml.push(
+        `<w:p><w:pPr><w:spacing w:before="180" w:after="60"/></w:pPr>` +
+          `<w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="24292F"/></w:rPr><w:t>DEEPTUTOR</w:t></w:r>` +
+          (assistantBadge
+            ? `<w:r><w:rPr><w:color w:val="57606A"/><w:sz w:val="16"/></w:rPr><w:t xml:space="preserve"> [${escapeXml(assistantBadge.trim())}]</w:t></w:r>`
+            : "") +
+          `</w:p>`,
+      );
+    }
 
     // Chain-of-thought / Thinking
     if (options.includeThinking && msg.thinking?.trim()) {
@@ -381,6 +433,10 @@ export async function buildDocxBlob(
     '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
     '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>' +
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="80"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="28"/><w:color w:val="0969DA"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="180" w:after="60"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="24"/><w:color w:val="1F2328"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="140" w:after="40"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="20"/><w:color w:val="32383F"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="1F2328"/></w:rPr></w:style>' +
     '<w:style w:type="character" w:styleId="CodeChar"><w:name w:val="Inline Code"/><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="20"/><w:shd w:val="clear" w:color="auto" w:fill="EFF1F3"/></w:rPr></w:style>' +
     '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0969DA"/><w:u w:val="single"/></w:rPr></w:style>' +
     '<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="D0D7DE"/></w:pBdr><w:ind w:left="240"/><w:spacing w:after="120"/></w:pPr><w:rPr><w:color w:val="57606A"/><w:i/></w:rPr></w:style>' +

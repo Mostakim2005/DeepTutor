@@ -104,23 +104,34 @@ export async function buildHtmlBlob(
   const dateStr = (metadata.exportedAt ?? new Date()).toLocaleString();
 
   const messagesHtml: string[] = [];
+  const tocLinks: string[] = [];
+  let questionCount = 0;
 
-  for (const msg of messages) {
+  for (let mIdx = 0; mIdx < messages.length; mIdx++) {
+    const msg = messages[mIdx];
     if (msg.role === "user" && !options.includeUserPrompts) {
       continue;
     }
 
     const isUser = msg.role === "user";
-    const speaker = escapeHtml(
-      msg.speaker || (isUser ? "User" : "DeepTutor"),
-    );
     const capBadge = msg.capability
       ? `<span class="badge capability">${escapeHtml(msg.capability)}</span>`
       : "";
     const roleClass = isUser ? "role-user" : "role-assistant";
 
-    let msgContent = `<div class="message ${roleClass}">`;
-    msgContent += `<div class="message-header"><span class="speaker">${speaker}</span>${capBadge}</div>`;
+    if (isUser) {
+      questionCount++;
+      const snippet = escapeHtml(msg.content.trim().slice(0, 75).replace(/[\r\n]+/g, " "));
+      tocLinks.push(`<li><a href="#turn-${mIdx + 1}"><strong>Q${questionCount}:</strong> ${snippet}${msg.content.length > 75 ? "…" : ""}</a></li>`);
+    }
+
+    let msgContent = `<div id="turn-${mIdx + 1}" class="message ${roleClass}">`;
+    if (isUser) {
+      msgContent += `<div class="message-header"><span class="speaker user-pill">YOU</span></div>`;
+    } else {
+      const modelBadge = msg.model ? `<span class="badge model-pill">${escapeHtml(msg.model)}</span>` : "";
+      msgContent += `<div class="message-header"><span class="speaker assistant-pill">DEEPTUTOR</span>${modelBadge}${capBadge}</div>`;
+    }
 
     // Thinking
     if (options.includeThinking && msg.thinking?.trim()) {
@@ -339,12 +350,24 @@ export async function buildHtmlBlob(
       margin: 1rem 0;
       font-size: 0.9rem;
     }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
     th, td {
       border: 1px solid var(--border);
       padding: 0.5rem 0.75rem;
       text-align: left;
     }
     th { background: var(--soft); font-weight: 600; }
+    .toc-card {
+      margin-bottom: 2rem;
+      padding: 1rem 1.25rem;
+      border-radius: 10px;
+      background: var(--soft);
+      border: 1px solid var(--border);
+    }
+    .toc-card summary { font-size: 1rem; font-weight: 600; cursor: pointer; color: var(--text); }
+    .toc-list { margin: 0.75rem 0 0.25rem 0; padding-left: 1.25rem; list-style-type: decimal; }
+    .toc-list li { margin-bottom: 0.35rem; font-size: 0.9rem; }
     blockquote {
       margin: 1rem 0;
       padding-left: 1rem;
@@ -356,6 +379,8 @@ export async function buildHtmlBlob(
     @media print {
       body { padding: 0; background: #fff; color: #000; }
       .message { break-inside: avoid; border: 1px solid #ccc; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; }
       details[open] summary ~ * { display: block; }
     }
   </style>
@@ -367,6 +392,14 @@ export async function buildHtmlBlob(
       <div class="meta">${dateStr}</div>
     </header>
     <main>
+      ${tocLinks.length > 0 ? `
+      <details class="toc-card" open>
+        <summary>Table of Contents (${tocLinks.length} questions)</summary>
+        <ol class="toc-list">
+          ${tocLinks.join("\n")}
+        </ol>
+      </details>
+      ` : ""}
       ${messagesHtml.join("\n")}
     </main>
   </div>

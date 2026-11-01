@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
-import { ArrowUpRight, Bot, ChevronDown, EyeOff, MessageCircle, Minus, Pin, Plus, Star, UserRound, Users } from "lucide-react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { ArrowUpRight, Bot, ChevronDown, Eye, EyeOff, MessageCircle, Minus, Pin, Plus, Star, UserRound, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { agentGlyph, agentKindLabel } from "@/components/agents/agent-icons";
 import PartnerAvatar from "@/components/partners/PartnerAvatar";
@@ -133,6 +133,64 @@ export default function AnswerModeMenu({
   );
 }
 
+function ModelPreferenceActions({
+  name,
+  isPinned,
+  isHidden,
+  onTogglePin,
+  onToggleHide,
+}: {
+  name: string;
+  isPinned: boolean;
+  isHidden: boolean;
+  onTogglePin: (name: string) => void;
+  onToggleHide: (name: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <span className="flex items-center gap-1 z-10" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onTogglePin(name);
+        }}
+        className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/15 transition-all text-muted-foreground/40 hover:text-amber-400"
+        title={isPinned ? t("Unpin model") : t("Pin model")}
+        aria-label={isPinned ? t("Unpin model") : t("Pin model")}
+      >
+        <Star
+          size={13}
+          strokeWidth={1.8}
+          className={
+            isPinned
+              ? "text-amber-400 fill-amber-400 filter drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
+              : "transition-colors"
+          }
+        />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleHide(name);
+        }}
+        className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/15 transition-all"
+        title={isHidden ? t("Show model") : t("Hide model")}
+        aria-label={isHidden ? t("Show model") : t("Hide model")}
+      >
+        {isHidden ? (
+          <EyeOff size={13} strokeWidth={1.8} className="text-rose-400 hover:text-rose-300 transition-colors" />
+        ) : (
+          <Eye size={13} strokeWidth={1.8} className="text-muted-foreground/50 hover:text-foreground transition-colors" />
+        )}
+      </button>
+    </span>
+  );
+}
+
 function AnswerList({
   persona,
   answerers,
@@ -156,12 +214,67 @@ function AnswerList({
     };
   }, [wantsPersonas]);
 
+  const [pinnedNames, setPinnedNames] = useState<Set<string>>(() =>
+    new Set((answerers?.agents ?? []).filter((item) => item.isPinned).map((item) => item.name)),
+  );
+  const [hiddenNames, setHiddenNames] = useState<Set<string>>(() =>
+    new Set((answerers?.agents ?? []).filter((item) => item.isHidden).map((item) => item.name)),
+  );
+
+  useEffect(() => {
+    if (answerers?.agents) {
+      setPinnedNames(new Set(answerers.agents.filter((item) => item.isPinned).map((item) => item.name)));
+      setHiddenNames(new Set(answerers.agents.filter((item) => item.isHidden).map((item) => item.name)));
+    }
+  }, [answerers?.agents]);
+
+  const handleTogglePin = useCallback(async (modelName: string) => {
+    setPinnedNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelName)) next.delete(modelName);
+      else next.add(modelName);
+      return next;
+    });
+    try {
+      await fetch("/api/settings/model-preferences/toggle-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName }),
+      });
+    } catch (err) {
+      console.error("Failed to toggle model pin:", err);
+    }
+  }, []);
+
+  const handleToggleHide = useCallback(async (modelName: string) => {
+    setHiddenNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelName)) next.delete(modelName);
+      else next.add(modelName);
+      return next;
+    });
+    try {
+      await fetch("/api/settings/model-preferences/toggle-hide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName }),
+      });
+    } catch (err) {
+      console.error("Failed to toggle model hide:", err);
+    }
+  }, []);
+
   const needle = query.trim().toLocaleLowerCase();
   const matches = (...text: (string | undefined)[]) =>
     !needle || text.join(" ").toLocaleLowerCase().includes(needle);
   const styleRows = personas.filter((item) => matches(item.name, item.description));
   const partnerRows = answerers?.partners.filter((item) => matches(item.name)) ?? [];
-  const allAgents = answerers?.agents ?? [];
+  const rawAgents = answerers?.agents ?? [];
+  const allAgents = rawAgents.map((item) => ({
+    ...item,
+    isPinned: pinnedNames.has(item.name),
+    isHidden: hiddenNames.has(item.name),
+  }));
   const matchingAgents = allAgents.filter((item) => matches(item.displayName, item.name));
   const pinnedAgents = matchingAgents.filter((item) => item.isPinned && !item.isHidden);
   const normalAgents = matchingAgents.filter((item) => !item.isPinned && !item.isHidden);
@@ -246,6 +359,15 @@ function AnswerList({
                   </span>
                 }
                 meta={agentKindLabel(item.kind) || undefined}
+                trailing={
+                  <ModelPreferenceActions
+                    name={item.name}
+                    isPinned={Boolean(item.isPinned)}
+                    isHidden={Boolean(item.isHidden)}
+                    onTogglePin={handleTogglePin}
+                    onToggleHide={handleToggleHide}
+                  />
+                }
               />
             ))}
             {!needle && hiddenAgents.length > 0 && (
@@ -274,6 +396,15 @@ function AnswerList({
                       leading={<AgentFace kind={item.kind} size={15} />}
                       title={item.displayName || item.name}
                       meta={agentKindLabel(item.kind) || undefined}
+                      trailing={
+                        <ModelPreferenceActions
+                          name={item.name}
+                          isPinned={Boolean(item.isPinned)}
+                          isHidden={Boolean(item.isHidden)}
+                          onTogglePin={handleTogglePin}
+                          onToggleHide={handleToggleHide}
+                        />
+                      }
                     />
                   ))}
               </div>
@@ -360,7 +491,63 @@ function PartnerLinkList({
     ...(groups ? (["partner_group"] as const) : []),
     ...(agents ? (["agent"] as const) : []),
   ];
-  const allAgents = agents?.options ?? [];
+
+  const [pinnedNames, setPinnedNames] = useState<Set<string>>(() =>
+    new Set((agents?.options ?? []).filter((item) => item.isPinned).map((item) => item.name)),
+  );
+  const [hiddenNames, setHiddenNames] = useState<Set<string>>(() =>
+    new Set((agents?.options ?? []).filter((item) => item.isHidden).map((item) => item.name)),
+  );
+
+  useEffect(() => {
+    if (agents?.options) {
+      setPinnedNames(new Set(agents.options.filter((item) => item.isPinned).map((item) => item.name)));
+      setHiddenNames(new Set(agents.options.filter((item) => item.isHidden).map((item) => item.name)));
+    }
+  }, [agents?.options]);
+
+  const handleTogglePin = useCallback(async (modelName: string) => {
+    setPinnedNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelName)) next.delete(modelName);
+      else next.add(modelName);
+      return next;
+    });
+    try {
+      await fetch("/api/settings/model-preferences/toggle-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName }),
+      });
+    } catch (err) {
+      console.error("Failed to toggle model pin:", err);
+    }
+  }, []);
+
+  const handleToggleHide = useCallback(async (modelName: string) => {
+    setHiddenNames((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelName)) next.delete(modelName);
+      else next.add(modelName);
+      return next;
+    });
+    try {
+      await fetch("/api/settings/model-preferences/toggle-hide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: modelName }),
+      });
+    } catch (err) {
+      console.error("Failed to toggle model hide:", err);
+    }
+  }, []);
+
+  const rawAgents = agents?.options ?? [];
+  const allAgents = rawAgents.map((item) => ({
+    ...item,
+    isPinned: pinnedNames.has(item.name),
+    isHidden: hiddenNames.has(item.name),
+  }));
   const pinnedAgents = allAgents.filter((item) => item.isPinned && !item.isHidden);
   const normalAgents = allAgents.filter((item) => !item.isPinned && !item.isHidden);
   const hiddenAgents = allAgents.filter((item) => item.isHidden);
@@ -433,6 +620,15 @@ function PartnerLinkList({
                       </span>
                     }
                     meta={agentKindLabel(item.kind) || undefined}
+                    trailing={
+                      <ModelPreferenceActions
+                        name={item.name}
+                        isPinned={Boolean(item.isPinned)}
+                        isHidden={Boolean(item.isHidden)}
+                        onTogglePin={handleTogglePin}
+                        onToggleHide={handleToggleHide}
+                      />
+                    }
                   />
                   {chosen && agents.onBudgetChange && (
                     <Budget value={agents.budget ?? null} onChange={agents.onBudgetChange} />
@@ -471,6 +667,15 @@ function PartnerLinkList({
                           leading={<AgentFace kind={item.kind} size={15} />}
                           title={item.displayName || item.name}
                           meta={agentKindLabel(item.kind) || undefined}
+                          trailing={
+                            <ModelPreferenceActions
+                              name={item.name}
+                              isPinned={Boolean(item.isPinned)}
+                              isHidden={Boolean(item.isHidden)}
+                              onTogglePin={handleTogglePin}
+                              onToggleHide={handleToggleHide}
+                            />
+                          }
                         />
                         {chosen && agents.onBudgetChange && (
                           <Budget value={agents.budget ?? null} onChange={agents.onBudgetChange} />

@@ -327,6 +327,7 @@ export function TrayOption({
   leading,
   title,
   meta,
+  trailing,
   disabled = false,
 }: {
   selected: boolean;
@@ -334,17 +335,23 @@ export function TrayOption({
   leading: ReactNode;
   title: ReactNode;
   meta?: ReactNode;
+  trailing?: ReactNode;
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
+    <div
       role="option"
       aria-selected={selected}
       data-tray-option
-      disabled={disabled}
-      onClick={onSelect}
-      className="dt-tray-row"
+      tabIndex={disabled ? -1 : 0}
+      onClick={disabled ? undefined : onSelect}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className="dt-tray-row group cursor-pointer"
     >
       <span aria-hidden className="dt-tray-lead">
         {leading}
@@ -353,10 +360,18 @@ export function TrayOption({
         <span className="dt-tray-row-title">{title}</span>
         {meta ? <span className="dt-tray-row-meta">{meta}</span> : null}
       </span>
+      {trailing ? (
+        <span
+          className="shrink-0 flex items-center gap-1 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {trailing}
+        </span>
+      ) : null}
       <span aria-hidden className="dt-tray-check">
         <Check size={11} strokeWidth={3} />
       </span>
-    </button>
+    </div>
   );
 }
 
