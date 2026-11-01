@@ -482,9 +482,13 @@ function wrapBareLatexInLine(line: string): string {
  * common from models that assume the host renders full LaTeX.
  */
 function wrapBareEnvironments(text: string): string {
-  return text.replace(/\\begin\{([a-zA-Z*]+)\}[\s\S]*?\\end\{\1\}/g, (match) =>
-    commandsAreKnown(match) ? `\n$$\n${match.trim()}\n$$\n` : match,
+  // Never re-wrap environments that already sit inside an existing math block ($$...$$ or $...$)
+  const existingMath = maskSpans(text, MATH_SPAN_RE, "ALREADY_MATH");
+  const wrapped = existingMath.masked.replace(
+    /\\begin\{([a-zA-Z*]+)\}[\s\S]*?\\end\{\1\}/g,
+    (match) => (commandsAreKnown(match) ? `\n$$\n${match.trim()}\n$$\n` : match),
   );
+  return existingMath.restore(wrapped);
 }
 
 function wrapBareLatex(text: string): string {

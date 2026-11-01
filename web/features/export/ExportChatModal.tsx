@@ -26,6 +26,7 @@ import {
   User,
   Bot,
   SlidersHorizontal,
+  Printer,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { notify } from "@/lib/notifications";
@@ -33,6 +34,7 @@ import {
   exportSession,
   triggerDownload,
   copyExportToClipboard,
+  printPublicationPdf,
   type ExportFormat,
   type ExportFilterOptions,
   DEFAULT_EXPORT_FILTER_OPTIONS,
@@ -342,6 +344,29 @@ export default function ExportChatModal({
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       notify(`${t("Copy failed")}: ${msg}`, { tone: "error" });
+    }
+  };
+
+  const handlePrintPdf = () => {
+    if (selectedIds.size === 0) {
+      notify(t("Please select at least one message to export"), { tone: "error" });
+      return;
+    }
+
+    try {
+      const metadata = {
+        title: title || "DeepTutor Conversation",
+        sessionId,
+        workspaceId,
+        workspaceName,
+        exportedAt: new Date(),
+      };
+      const effectiveOptions = getEffectiveOptions();
+      printPublicationPdf(messages, effectiveOptions, metadata);
+      notify(t("Opening publication-grade print & vector PDF dialog..."), { tone: "success" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify(`${t("Print failed")}: ${msg}`, { tone: "error" });
     }
   };
 
@@ -767,6 +792,18 @@ export default function ExportChatModal({
             >
               {t("Cancel")}
             </button>
+            {selectedFormat === "pdf" && (
+              <button
+                type="button"
+                onClick={handlePrintPdf}
+                disabled={exporting || selectedIds.size === 0}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-blue-500/40 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors shadow-sm"
+                title={t("Save as publication-grade vector PDF with vector KaTeX math and native Unicode fonts (matching Claude export)")}
+              >
+                <Printer size={14} />
+                {t("Print / Save Vector PDF")}
+              </button>
+            )}
             <button
               type="button"
               onClick={handleExport}

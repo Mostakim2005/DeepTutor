@@ -163,7 +163,8 @@ const RAW_HTML_CODE_BLOCK_CLOSE_REGEX = {
   pre: /<\/pre\s*>/i,
   code: /<\/code\s*>/i,
 } as const;
-const PROTECTED_SPAN_REGEX = /```[\s\S]*?```|`[^`\n]*`/g;
+const PROTECTED_SPAN_REGEX =
+  /```[\s\S]*?```|`[^`\n]*`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)(?:\\.|[^$\n])*?(?<!\s)\$/g;
 const PROTECTED_PLACEHOLDER_REGEX = /\u0000PROTECTED_(\d+)\u0000/g;
 const HTML_ATTR_VALUE = /(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+)/.source;
 const HTML_EVENT_ATTR_REGEX = new RegExp(

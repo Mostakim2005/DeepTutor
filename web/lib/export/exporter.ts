@@ -6,7 +6,7 @@
 import { normalizeMessages, type InputMessage } from "./adapter";
 import { buildDocxBlob } from "./docx-builder";
 import { buildXlsxBlob } from "./xlsx-builder";
-import { buildHtmlBlob } from "./html-builder";
+import { buildHtmlBlob, buildPublicationHtml } from "./html-builder";
 import { buildPdfBlob } from "./pdf-builder";
 import { buildMarkdownString } from "./markdown-builder";
 import { buildJsonString, buildTextString } from "./text-builder";
@@ -129,4 +129,54 @@ export async function copyExportToClipboard(
   }
   const md = buildMarkdownString(messages, options, metadata);
   await navigator.clipboard.writeText(md);
+}
+
+/**
+ * Triggers high-fidelity browser vector print / PDF generation via a publication-styled
+ * offscreen iframe with KaTeX vector math, syntax highlighting, and CSS Paged Media.
+ */
+export function printPublicationPdf(
+  rawMessages: InputMessage[],
+  options: ExportFilterOptions,
+  metadata: ExportMetadata,
+): void {
+  let messages = normalizeMessages(rawMessages);
+  if (options.selectedMessageIds && options.selectedMessageIds.length > 0) {
+    const selectedSet = new Set(options.selectedMessageIds.map(String));
+    messages = messages.filter((m) => selectedSet.has(String(m.id)));
+  }
+  const html = buildPublicationHtml(messages, options, metadata);
+
+  const iframe = document.createElement("iframe");
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.zIndex = "-999";
+  document.body.appendChild(iframe);
+
+  const frameDoc = iframe.contentWindow?.document;
+  if (!frameDoc) return;
+
+  frameDoc.open();
+  frameDoc.write(html);
+  frameDoc.close();
+
+  // Allow KaTeX fonts, CSS stylesheets, and images to settle before triggering print
+  setTimeout(() => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch (e) {
+      console.error("Print invocation error:", e);
+    } finally {
+      setTimeout(() => {
+        if (iframe.parentNode) {
+          document.body.removeChild(iframe);
+        }
+      }, 60000);
+    }
+  }, 450);
 }

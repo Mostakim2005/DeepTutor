@@ -75,9 +75,16 @@ function countFences(line: string): number {
  * block first means there is nothing to close.
  */
 function findDisplayClose(lines: string[], start: number): number {
+  let consecutiveEmpty = 0;
   for (let j = start; j < lines.length; j++) {
     const trimmed = lines[j].trim();
-    if (!trimmed) return -1;
+    if (!trimmed) {
+      consecutiveEmpty++;
+      if (consecutiveEmpty > 2) return -1;
+      continue;
+    }
+    consecutiveEmpty = 0;
+    if (trimmed.startsWith("#") || trimmed.startsWith("```")) return -1;
     const fences = countFences(trimmed);
     if (fences === 0) continue;
     return fences === 1 && trimmed.endsWith("$$") ? j : -1;

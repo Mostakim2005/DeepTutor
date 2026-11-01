@@ -1,7 +1,8 @@
 /**
- * Self-contained HTML conversation export builder.
- * Produces a single, offline-ready web page with responsive light/dark theme,
- * collapsible reasoning traces, tool execution cards, citations, and print styles.
+ * Publication-Grade HTML & Vector Print Export Builder.
+ * Produces an offline-ready, standalone HTML document with embedded KaTeX vector math,
+ * syntax-highlighted code blocks, inline tables with repeated headers, and CSS Paged Media
+ * matching the publication standard seen in reference Claude exports.
  */
 
 import katex from "katex";
@@ -20,86 +21,260 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function renderMathInHtml(text: string): string {
-  // Render display math $$...$$
-  let result = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => {
+function parseMarkdownTable(lines: string[]): string {
+  if (lines.length < 2) return lines.join("\n");
+
+  const headerLine = lines[0].trim();
+  const sepLine = lines[1].trim();
+
+  const parseCells = (line: string): string[] => {
+    return line
+      .trim()
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((c) => c.trim());
+  };
+
+  const headers = parseCells(headerLine);
+  const sepCells = parseCells(sepLine);
+
+  if (headers.length === 0 || sepCells.length !== headers.length) {
+    return lines.join("\n");
+  }
+
+  // Parse alignments (:--- = left, :---: = center, ---: = right)
+  const alignments = sepCells.map((cell) => {
+    const left = cell.startsWith(":");
+    const right = cell.endsWith(":");
+    if (left && right) return "center";
+    if (right) return "right";
+    return "left";
+  });
+
+  let html = '<div class="table-container"><table><thead><tr>';
+  headers.forEach((h, idx) => {
+    const align = alignments[idx] || "left";
+    html += `<th style="text-align: ${align}">${parseInlineMarkdown(h)}</th>`;
+  });
+  html += "</tr></thead><tbody>";
+
+  for (let i = 2; i < lines.length; i++) {
+    const rowLine = lines[i].trim();
+    if (!rowLine.includes("|")) continue;
+    const rowCells = parseCells(rowLine);
+    html += "<tr>";
+    headers.forEach((_, idx) => {
+      const cell = rowCells[idx] ?? "";
+      const align = alignments[idx] || "left";
+      html += `<td style="text-align: ${align}">${parseInlineMarkdown(cell)}</td>`;
+    });
+    html += "</tr>";
+  }
+
+  html += "</tbody></table></div>";
+  return html;
+}
+
+function parseInlineMarkdown(text: string): string {
+  let res = escapeHtml(text);
+  // Bold & Italic
+  res = res.replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>");
+  res = res.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+  res = res.replace(/\*(.*?)\*/g, "<em>$1</em>");
+  // Strikethrough
+  res = res.replace(/~~(.*?)~~/g, "<del>$1</del>");
+  // Links
+  res = res.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+  );
+  // Keyboard tags and sub/sup
+  res = res.replace(/&lt;kbd&gt;(.*?)&lt;\/kbd&gt;/gi, "<kbd>$1</kbd>");
+  res = res.replace(/&lt;sub&gt;(.*?)&lt;\/sub&gt;/gi, "<sub>$1</sub>");
+  res = res.replace(/&lt;sup&gt;(.*?)&lt;\/sup&gt;/gi, "<sup>$1</sup>");
+  res = res.replace(/&lt;mark&gt;(.*?)&lt;\/mark&gt;/gi, "<mark>$1</mark>");
+  return res;
+}
+
+export function markdownToHtml(md: string): string {
+  if (!md) return "";
+
+  const masks: string[] = [];
+  const mask = (snippet: string): string => {
+    masks.push(snippet);
+    return `\u0000MASK_${masks.length - 1}\u0000`;
+  };
+
+  let content = md.replace(/\r\n/g, "\n");
+
+  // Step 1: Mask and render Fenced Code Blocks
+  content = content.replace(
+    /^```([a-zA-Z0-9_-]*)\n([\s\S]*?)\n```$/gm,
+    (_, lang, code) => {
+      const safeCode = escapeHtml(code);
+      const languageBadge = (lang || "CODE").toUpperCase();
+      const codeHtml = `<div class="code-block"><div class="code-header">${escapeHtml(languageBadge)}</div><pre><code>${safeCode}</code></pre></div>`;
+      return mask(codeHtml);
+    },
+  );
+
+  // Step 2: Mask and render Display Math $$...$$
+  content = content.replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => {
     try {
-      return `<div class="math-display">${katex.renderToString(latex.trim(), { displayMode: true, throwOnError: false })}</div>`;
+      const mathHtml = `<div class="math-display">${katex.renderToString(latex.trim(), {
+        displayMode: true,
+        throwOnError: false,
+      })}</div>`;
+      return mask(mathHtml);
     } catch {
-      return `<div class="math-display"><code>${escapeHtml(latex)}</code></div>`;
+      return mask(`<div class="math-display"><code>${escapeHtml(latex.trim())}</code></div>`);
     }
   });
 
-  // Render inline math $...$
-  result = result.replace(/(^|[^\$])\$([^\$\n]+?)\$(?!\$)/g, (_, prefix, latex) => {
-    try {
-      return `${prefix}<span class="math-inline">${katex.renderToString(latex.trim(), { displayMode: false, throwOnError: false })}</span>`;
-    } catch {
-      return `${prefix}<code>${escapeHtml(latex)}</code>`;
-    }
+  // Step 3: Mask and render Inline Math $...$
+  content = content.replace(
+    /(^|[^\\])\$([^\$\n]+?)\$(?!\$)/g,
+    (_, prefix, latex) => {
+      try {
+        const mathHtml = `<span class="math-inline">${katex.renderToString(latex.trim(), {
+          displayMode: false,
+          throwOnError: false,
+        })}</span>`;
+        return `${prefix}${mask(mathHtml)}`;
+      } catch {
+        return `${prefix}${mask(`<code>${escapeHtml(latex.trim())}</code>`)}`;
+      }
+    },
+  );
+
+  // Step 4: Mask Inline Code `...`
+  content = content.replace(/`([^`\n]+)`/g, (_, code) => {
+    return mask(`<code>${escapeHtml(code)}</code>`);
   });
+
+  // Step 5: Process lines for Tables, Lists, Headings, and Paragraphs
+  const rawLines = content.split("\n");
+  const processedBlocks: string[] = [];
+  let i = 0;
+
+  while (i < rawLines.length) {
+    const line = rawLines[i];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      i++;
+      continue;
+    }
+
+    // Markdown Table Start
+    if (
+      trimmed.startsWith("|") &&
+      i + 1 < rawLines.length &&
+      rawLines[i + 1].trim().startsWith("|") &&
+      rawLines[i + 1].includes("---")
+    ) {
+      const tableLines: string[] = [];
+      while (i < rawLines.length && rawLines[i].trim().startsWith("|")) {
+        tableLines.push(rawLines[i]);
+        i++;
+      }
+      processedBlocks.push(parseMarkdownTable(tableLines));
+      continue;
+    }
+
+    // Headings
+    const headingMatch = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const text = parseInlineMarkdown(headingMatch[2].trim());
+      const slug = headingMatch[2]
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/\s+/g, "-");
+      processedBlocks.push(`<h${level} id="${slug}">${text}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    // Horizontal Rule
+    if (/^(\*{3,}|-{3,}|_{3,})$/.test(trimmed)) {
+      processedBlocks.push("<hr/>");
+      i++;
+      continue;
+    }
+
+    // Blockquote
+    if (trimmed.startsWith(">")) {
+      const quoteLines: string[] = [];
+      while (i < rawLines.length && rawLines[i].trim().startsWith(">")) {
+        quoteLines.push(rawLines[i].trim().replace(/^>\s?/, ""));
+        i++;
+      }
+      const quoteBody = markdownToHtml(quoteLines.join("\n"));
+      processedBlocks.push(`<blockquote>${quoteBody}</blockquote>`);
+      continue;
+    }
+
+    // Lists (unordered / ordered / task lists)
+    if (/^(\*|-|\+|\d+\.)\s/.test(trimmed)) {
+      const isOrdered = /^\d+\.\s/.test(trimmed);
+      const listTag = isOrdered ? "ol" : "ul";
+      let listHtml = `<${listTag}>`;
+
+      while (i < rawLines.length && /^(\*|-|\+|\d+\.)\s/.test(rawLines[i].trim())) {
+        const itemLine = rawLines[i].trim().replace(/^(\*|-|\+|\d+\.)\s+/, "");
+        // Check for task checkbox
+        const taskCheckMatch = /^\[([ xX])\]\s+(.*)$/.exec(itemLine);
+        if (taskCheckMatch) {
+          const checked = taskCheckMatch[1].toLowerCase() === "x";
+          const taskText = parseInlineMarkdown(taskCheckMatch[2]);
+          listHtml += `<li class="task-item"><input type="checkbox" ${checked ? "checked" : ""} disabled/> ${taskText}</li>`;
+        } else {
+          listHtml += `<li>${parseInlineMarkdown(itemLine)}</li>`;
+        }
+        i++;
+      }
+      listHtml += `</${listTag}>`;
+      processedBlocks.push(listHtml);
+      continue;
+    }
+
+    // Plain Paragraph
+    const paraLines: string[] = [];
+    while (
+      i < rawLines.length &&
+      rawLines[i].trim() &&
+      !rawLines[i].trim().startsWith("#") &&
+      !rawLines[i].trim().startsWith("|") &&
+      !rawLines[i].trim().startsWith(">") &&
+      !/^(\*|-|\+|\d+\.)\s/.test(rawLines[i].trim()) &&
+      !/^(\*{3,}|-{3,}|_{3,})$/.test(rawLines[i].trim())
+    ) {
+      paraLines.push(rawLines[i]);
+      i++;
+    }
+
+    if (paraLines.length > 0) {
+      const paraText = paraLines.map(parseInlineMarkdown).join("<br/>");
+      processedBlocks.push(`<p>${paraText}</p>`);
+    }
+  }
+
+  // Restore all masked blocks
+  let result = processedBlocks.join("\n");
+  for (let idx = 0; idx < masks.length; idx++) {
+    result = result.replace(`\u0000MASK_${idx}\u0000`, () => masks[idx]);
+  }
 
   return result;
 }
 
-function markdownToHtml(md: string): string {
-  let html = escapeHtml(md);
-
-  // Math replacement before formatting
-  html = renderMathInHtml(html);
-
-  // Bold & Italic
-  html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
-
-  // Inline Code
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-
-  // Links
-  html = html.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
-  );
-
-  // Headings
-  html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
-  html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
-  html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
-
-  // Blockquotes
-  html = html.replace(/^\> (.*$)/gim, "<blockquote>$1</blockquote>");
-
-  // Code Fences
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    return `<div class="code-block"><div class="code-header">${escapeHtml(lang || "CODE")}</div><pre><code>${code}</code></pre></div>`;
-  });
-
-  // Paragraphs
-  html = html
-    .split(/\n\n+/)
-    .map((p) => {
-      p = p.trim();
-      if (!p) return "";
-      if (
-        p.startsWith("<h") ||
-        p.startsWith("<div") ||
-        p.startsWith("<blockquote") ||
-        p.startsWith("<table")
-      ) {
-        return p;
-      }
-      return `<p>${p.replace(/\n/g, "<br/>")}</p>`;
-    })
-    .join("\n");
-
-  return html;
-}
-
-export async function buildHtmlBlob(
+export function buildPublicationHtml(
   messages: NormalizedExportMessage[],
   options: ExportFilterOptions,
   metadata: ExportMetadata,
-): Promise<Blob> {
+): string {
   const title = escapeHtml(metadata.title || "DeepTutor Conversation");
   const dateStr = (metadata.exportedAt ?? new Date()).toLocaleString();
 
@@ -122,14 +297,18 @@ export async function buildHtmlBlob(
     if (isUser) {
       questionCount++;
       const snippet = escapeHtml(msg.content.trim().slice(0, 75).replace(/[\r\n]+/g, " "));
-      tocLinks.push(`<li><a href="#turn-${mIdx + 1}"><strong>Q${questionCount}:</strong> ${snippet}${msg.content.length > 75 ? "…" : ""}</a></li>`);
+      tocLinks.push(
+        `<li><a href="#turn-${mIdx + 1}"><strong>Q${questionCount}:</strong> ${snippet}${msg.content.length > 75 ? "…" : ""}</a></li>`,
+      );
     }
 
     let msgContent = `<div id="turn-${mIdx + 1}" class="message ${roleClass}">`;
     if (isUser) {
       msgContent += `<div class="message-header"><span class="speaker user-pill">YOU</span></div>`;
     } else {
-      const modelBadge = msg.model ? `<span class="badge model-pill">${escapeHtml(msg.model)}</span>` : "";
+      const modelBadge = msg.model
+        ? `<span class="badge model-pill">${escapeHtml(msg.model)}</span>`
+        : "";
       msgContent += `<div class="message-header"><span class="speaker assistant-pill">DEEPTUTOR</span>${modelBadge}${capBadge}</div>`;
     }
 
@@ -167,29 +346,6 @@ export async function buildHtmlBlob(
       msgContent += `<div class="message-body">${markdownToHtml(msg.content)}</div>`;
     }
 
-    // Tables
-    if (options.includeTables && msg.tables?.length) {
-      for (const tbl of msg.tables) {
-        msgContent += `<div class="table-container">`;
-        if (tbl.title) {
-          msgContent += `<h4>${escapeHtml(tbl.title)}</h4>`;
-        }
-        msgContent += `<table><thead><tr>`;
-        tbl.headers.forEach((h) => {
-          msgContent += `<th>${escapeHtml(h)}</th>`;
-        });
-        msgContent += `</tr></thead><tbody>`;
-        tbl.rows.forEach((row) => {
-          msgContent += `<tr>`;
-          row.forEach((cell) => {
-            msgContent += `<td>${escapeHtml(cell)}</td>`;
-          });
-          msgContent += `</tr>`;
-        });
-        msgContent += `</tbody></table></div>`;
-      }
-    }
-
     // Sources & Citations
     if (options.includeSources && msg.sources?.length) {
       msgContent += `<div class="sources-list"><h5>Sources &amp; Citations</h5><ol>`;
@@ -217,7 +373,7 @@ export async function buildHtmlBlob(
     messagesHtml.push(msgContent);
   }
 
-  const documentHtml = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
@@ -228,13 +384,13 @@ export async function buildHtmlBlob(
     :root {
       --bg: #ffffff;
       --text: #1f2328;
-      --muted: #656d76;
+      --muted: #57606a;
       --border: #d0d7de;
       --soft: #f6f8fa;
       --user-bg: #f0f6ff;
       --user-border: #c8d9ff;
       --user-accent: #0969da;
-      --assistant-accent: #8250df;
+      --assistant-accent: #1f2328;
       --code-bg: #f6f8fa;
     }
     @media (prefers-color-scheme: dark) {
@@ -247,62 +403,77 @@ export async function buildHtmlBlob(
         --user-bg: #13233a;
         --user-border: #1f3a64;
         --user-accent: #58a6ff;
-        --assistant-accent: #bc8cff;
+        --assistant-accent: #e6edf3;
         --code-bg: #161b22;
       }
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 2rem;
+      padding: 2.5rem 2rem;
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      line-height: 1.6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Devanagari", "Noto Sans Bengali", Helvetica, Arial, sans-serif;
+      font-size: 14.5px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
     }
     .container {
-      max-width: 900px;
+      max-width: 860px;
       margin: 0 auto;
     }
     header {
       margin-bottom: 2rem;
-      padding-bottom: 1.5rem;
+      padding-bottom: 1.25rem;
       border-bottom: 1px solid var(--border);
     }
-    h1 { margin: 0 0 0.5rem 0; font-size: 1.8rem; }
-    .meta { color: var(--muted); font-size: 0.9rem; }
+    h1.doc-title { margin: 0 0 0.5rem 0; font-size: 2rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+    .meta { color: var(--muted); font-size: 0.85rem; }
+    
     .message {
-      margin-bottom: 2rem;
-      padding: 1.25rem;
+      margin-bottom: 2.5rem;
+      padding: 1.25rem 1.5rem;
       border-radius: 12px;
-      border: 1px solid var(--border);
       background: var(--bg);
     }
     .message.role-user {
       background: var(--user-bg);
-      border-color: var(--user-border);
+      border-left: 4px solid var(--user-accent);
+      border-radius: 4px 12px 12px 4px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .message.role-assistant {
+      background: transparent;
+      padding: 0.5rem 0 2rem 0;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
     }
     .message-header {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-      font-weight: 600;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
     }
-    .role-user .speaker { color: var(--user-accent); }
-    .role-assistant .speaker { color: var(--assistant-accent); }
+    .role-user .speaker { color: var(--user-accent); font-weight: 800; }
+    .role-assistant .speaker { color: var(--assistant-accent); font-weight: 800; }
+    
     .badge {
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       padding: 0.15rem 0.5rem;
       border-radius: 999px;
       background: var(--soft);
       border: 1px solid var(--border);
       color: var(--muted);
-      font-weight: normal;
+      font-weight: 500;
+      letter-spacing: normal;
     }
     details {
-      margin: 0.75rem 0;
-      padding: 0.5rem 0.75rem;
+      margin: 1rem 0;
+      padding: 0.6rem 0.9rem;
       border-radius: 8px;
       background: var(--soft);
       border: 1px solid var(--border);
@@ -314,50 +485,115 @@ export async function buildHtmlBlob(
       color: var(--muted);
       user-select: none;
     }
-    .thinking-card { border-left: 4px solid var(--assistant-accent); }
-    .tool-card { border-left: 4px solid var(--user-accent); }
+    .thinking-card { border-left: 3px solid #8250df; }
+    .tool-card { border-left: 3px solid var(--user-accent); }
+    
     .code-block {
-      margin: 1rem 0;
+      margin: 1.25rem 0;
       border: 1px solid var(--border);
       border-radius: 8px;
       overflow: hidden;
       background: var(--code-bg);
+      break-inside: avoid;
     }
     .code-header {
       padding: 0.35rem 0.75rem;
-      background: var(--border);
+      background: #eaeef2;
       font-size: 0.75rem;
-      font-weight: bold;
-      color: var(--muted);
+      font-weight: 700;
+      color: #57606a;
+      border-bottom: 1px solid var(--border);
+    }
+    @media (prefers-color-scheme: dark) {
+      .code-header { background: #21262d; color: #8b949e; }
     }
     pre {
       margin: 0;
-      padding: 0.75rem;
+      padding: 0.9rem 1rem;
       overflow-x: auto;
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-      font-size: 0.85rem;
+      font-size: 0.86rem;
+      line-height: 1.5;
     }
     code {
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
       background: var(--soft);
-      padding: 0.1rem 0.3rem;
+      padding: 0.15rem 0.35rem;
       border-radius: 4px;
-      font-size: 0.9em;
+      font-size: 0.88em;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
+    
+    .math-display {
+      margin: 1.25rem 0;
+      overflow-x: auto;
+      padding: 0.5rem 0;
+      text-align: center;
+      break-inside: avoid;
+    }
+    .math-inline {
+      padding: 0 0.15em;
+    }
+    
+    .table-container {
+      margin: 1.25rem 0;
+      overflow-x: auto;
+      break-inside: auto;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin: 1rem 0;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
+      line-height: 1.5;
     }
     thead { display: table-header-group; }
-    tr { page-break-inside: avoid; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
     th, td {
       border: 1px solid var(--border);
-      padding: 0.5rem 0.75rem;
-      text-align: left;
+      padding: 0.55rem 0.85rem;
     }
-    th { background: var(--soft); font-weight: 600; }
+    th {
+      background: var(--soft);
+      font-weight: 600;
+      color: var(--text);
+    }
+    tbody tr:nth-child(even) {
+      background: rgba(0, 0, 0, 0.015);
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+      color: var(--text);
+      font-weight: 600;
+      margin-top: 1.75rem;
+      margin-bottom: 0.75rem;
+      line-height: 1.3;
+      break-after: avoid;
+    }
+    h1 { font-size: 1.6rem; }
+    h2 { font-size: 1.35rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    h3 { font-size: 1.15rem; }
+    h4 { font-size: 1rem; }
+    
+    p { margin: 0.85rem 0; }
+    ul, ol { margin: 0.85rem 0; padding-left: 1.6rem; }
+    li { margin: 0.3rem 0; }
+    li.task-item { list-style-type: none; margin-left: -1.2rem; }
+    
+    blockquote {
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      border-left: 3.5px solid #0969da;
+      background: var(--soft);
+      color: var(--muted);
+      border-radius: 0 6px 6px 0;
+    }
+    a { color: #0969da; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    
     .toc-card {
       margin-bottom: 2rem;
       padding: 1rem 1.25rem;
@@ -367,44 +603,81 @@ export async function buildHtmlBlob(
     }
     .toc-card summary { font-size: 1rem; font-weight: 600; cursor: pointer; color: var(--text); }
     .toc-list { margin: 0.75rem 0 0.25rem 0; padding-left: 1.25rem; list-style-type: decimal; }
-    .toc-list li { margin-bottom: 0.35rem; font-size: 0.9rem; }
-    blockquote {
-      margin: 1rem 0;
-      padding-left: 1rem;
-      border-left: 3px solid var(--border);
-      color: var(--muted);
+    .toc-list li { margin-bottom: 0.35rem; font-size: 0.88rem; }
+    
+    /* Publication Paged Media Styles */
+    @page {
+      size: A4;
+      margin: 16mm 14mm 18mm 14mm;
+      @bottom-right {
+        content: counter(page) " / " counter(pages);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #656d76;
+      }
     }
-    a { color: var(--user-accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
     @media print {
-      body { padding: 0; background: #fff; color: #000; }
-      .message { break-inside: avoid; border: 1px solid #ccc; }
-      thead { display: table-header-group; }
-      tr { break-inside: avoid; }
-      details[open] summary ~ * { display: block; }
+      body {
+        padding: 0;
+        background: #ffffff !important;
+        color: #1f2328 !important;
+        font-size: 10pt;
+      }
+      .container { max-width: 100%; }
+      header { margin-bottom: 1.25rem; padding-bottom: 0.75rem; }
+      .message.role-user {
+        background: #f0f6ff !important;
+        border-left: 4px solid #0969da !important;
+        padding: 10pt 12pt;
+        break-inside: avoid;
+      }
+      .message.role-assistant {
+        background: transparent !important;
+        border-bottom: 1px solid #d0d7de !important;
+        padding: 6pt 0 16pt 0;
+      }
+      thead { display: table-header-group !important; }
+      tr { break-inside: avoid !important; }
+      pre, .code-block, .math-display, blockquote, .toc-card {
+        break-inside: avoid !important;
+      }
+      h1, h2, h3, h4 { break-after: avoid !important; }
+      details { border: 1px solid #d0d7de !important; }
+      details[open] summary ~ * { display: block !important; }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>${title}</h1>
+      <h1 class="doc-title">${title}</h1>
       <div class="meta">${dateStr}</div>
     </header>
     <main>
-      ${tocLinks.length > 0 ? `
+      ${
+        tocLinks.length > 0
+          ? `
       <details class="toc-card" open>
         <summary>Table of Contents (${tocLinks.length} questions)</summary>
         <ol class="toc-list">
           ${tocLinks.join("\n")}
         </ol>
       </details>
-      ` : ""}
+      `
+          : ""
+      }
       ${messagesHtml.join("\n")}
     </main>
   </div>
 </body>
 </html>`;
+}
 
+export async function buildHtmlBlob(
+  messages: NormalizedExportMessage[],
+  options: ExportFilterOptions,
+  metadata: ExportMetadata,
+): Promise<Blob> {
+  const documentHtml = buildPublicationHtml(messages, options, metadata);
   return new Blob([documentHtml], { type: "text/html;charset=utf-8" });
 }
