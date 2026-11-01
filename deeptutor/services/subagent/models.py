@@ -99,6 +99,18 @@ _DEEPSEEK_HARNESS_EFFORTS = (
     "max",
     "ultra",
 )
+_COMMAND_CODE_EFFORTS = ("low", "medium", "high", "max")
+_COMMAND_CODE_DEFAULT_MODELS = (
+    ("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash"),
+    ("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash"),
+    ("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro"),
+    ("qwen/qwen3.8-flash", "Qwen 3.8 Flash"),
+    ("qwen/qwen3.8-max", "Qwen 3.8 Max"),
+    ("moonshotai/kimi-k3", "Kimi K3"),
+    ("z-ai/glm-5.3-flash", "GLM 5.3 Flash"),
+    ("reflection/beam:free", "Reflection Beam (free)"),
+    ("inclusionai/ling-3.1-flash-1019:free", "Ling 3.1 Flash (free)"),
+)
 
 
 @dataclass(slots=True)
@@ -406,6 +418,27 @@ async def _deepseek_harness_options() -> BackendOptions:
     )
 
 
+async def _command_code_options() -> BackendOptions:
+    backend = get_backend("command_code")
+    detected = await backend.detect() if backend else None
+    available = detected.available if detected else False
+    version = detected.version if detected else ""
+    models = [
+        ModelOption(slug=name, display_name=label)
+        for name, label in _COMMAND_CODE_DEFAULT_MODELS
+    ]
+    return BackendOptions(
+        kind="command_code",
+        display_name="Command Code",
+        available=available,
+        version=version,
+        models=models,
+        efforts=list(_COMMAND_CODE_EFFORTS),
+        allow_custom_model=True,
+        detail="" if available else "cmdc CLI not found on PATH",
+    )
+
+
 # One provider per backend kind — the discovery order is the settings order.
 _PROVIDERS: dict[str, Callable[..., Awaitable[BackendOptions]]] = {
     "claude_code": _claude_options,
@@ -419,6 +452,7 @@ _PROVIDERS: dict[str, Callable[..., Awaitable[BackendOptions]]] = {
     "hermes_remote": _hermes_remote_options,
     "openclaw": _openclaw_options,
     "deepseek_harness": _deepseek_harness_options,
+    "command_code": _command_code_options,
 }
 
 

@@ -46,3 +46,8 @@
 - **Symptom**: Executing `dsh --profile headless` returned `MISSING_CREDENTIAL: llm-deepseek: no API key for provider route "deepseek-official"`.
 - **RCA**: Headless profile in DeepSeek Harness disables the local credentials extension (`@deepseek-ai/dsh-credentials-local`) by default and had an empty `cordis.patch.yml`.
 - **Resolution**: Configured `~/.dsh/profiles/headless/cordis.patch.yml` to re-enable local credentials (`disabled: false`) and routed default models to `inferx` / `deepseek-v4.1-flash-1017`.
+
+### BUG-010: Google AI Studio Quota Exhaustion & Timeouts on Gemini 4 Argon / 3.8 Flash
+- **Symptom**: Calling Gemini models via Google AI Studio free tier key consistently timed out on `gemini-3.8-flash` or failed with HTTP 429 (`You exceeded your current quota`) on `gemini-4-argon`.
+- **RCA**: Free tier Google AI Studio accounts allocate zero quota for `gemini-4-argon` and experience frequent server-side timeouts on `gemini-3.8-flash`, while `gemini-3.6-flash` and `gemini-3.5-flash` succeed reliably with HTTP 200.
+- **Resolution**: Pruned `gemini-4-argon` and `gemini-3.8-flash` from DeepTutor's `llm-profile-gemini-main` catalog, retaining `gemini-3.6-flash` as the active default alongside `gemini-3.5-flash`.

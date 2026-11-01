@@ -17,6 +17,7 @@ from deeptutor.services.subagent.antigravity import AntigravityBackend
 from deeptutor.services.subagent.base import SubagentBackend
 from deeptutor.services.subagent.claude_code import ClaudeCodeBackend
 from deeptutor.services.subagent.codex import CodexBackend
+from deeptutor.services.subagent.command_code import CommandCodeBackend
 from deeptutor.services.subagent.deepseek_harness import DeepSeekHarnessBackend
 from deeptutor.services.subagent.grok import GrokBackend
 from deeptutor.services.subagent.hermes import HermesBackend
@@ -40,6 +41,7 @@ _BACKENDS: dict[str, SubagentBackend] = {
         HermesRemoteBackend(),
         OpenClawBackend(),
         DeepSeekHarnessBackend(),
+        CommandCodeBackend(),
     )
 }
 
