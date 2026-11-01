@@ -255,7 +255,7 @@ export default function ChatSessionMenu({
                     />
                     <SessionMenuItem
                       icon={Download}
-                      label={t("Download Markdown")}
+                      label={t("Export", { defaultValue: "Export" })}
                       disabled={!canExport}
                       onClick={() => {
                         close();

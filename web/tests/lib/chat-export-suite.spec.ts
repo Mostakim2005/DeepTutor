@@ -219,4 +219,18 @@ describe("Multi-Format Export Engines", () => {
     // Thinking excluded
     expect(parsed.messages[0].thinking).toBeUndefined();
   });
+
+  it("filters exported messages strictly using selectedMessageIds", async () => {
+    // Only select the assistant message id: "2"
+    const selectedOptions: ExportFilterOptions = {
+      ...DEFAULT_EXPORT_FILTER_OPTIONS,
+      selectedMessageIds: ["2"],
+    };
+    const result = await exportSession(sampleMessages, "json", selectedOptions, meta);
+    const parsed = JSON.parse(await result.blob.text());
+
+    expect(parsed.messages).toHaveLength(1);
+    expect(parsed.messages[0].id).toBe("2");
+    expect(parsed.messages[0].role).toBe("assistant");
+  });
 });

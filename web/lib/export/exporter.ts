@@ -31,7 +31,11 @@ export async function exportSession(
   options: ExportFilterOptions,
   metadata: ExportMetadata,
 ): Promise<ExportResult> {
-  const messages = normalizeMessages(rawMessages);
+  let messages = normalizeMessages(rawMessages);
+  if (options.selectedMessageIds && options.selectedMessageIds.length > 0) {
+    const selectedSet = new Set(options.selectedMessageIds.map(String));
+    messages = messages.filter((m) => selectedSet.has(String(m.id)));
+  }
   const baseName = sanitizeFilename(metadata.title || "conversation");
   const dateStr = new Date().toISOString().slice(0, 10);
 
@@ -118,7 +122,11 @@ export async function copyExportToClipboard(
   options: ExportFilterOptions,
   metadata: ExportMetadata,
 ): Promise<void> {
-  const messages = normalizeMessages(rawMessages);
+  let messages = normalizeMessages(rawMessages);
+  if (options.selectedMessageIds && options.selectedMessageIds.length > 0) {
+    const selectedSet = new Set(options.selectedMessageIds.map(String));
+    messages = messages.filter((m) => selectedSet.has(String(m.id)));
+  }
   const md = buildMarkdownString(messages, options, metadata);
   await navigator.clipboard.writeText(md);
 }

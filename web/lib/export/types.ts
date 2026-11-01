@@ -26,6 +26,8 @@ export interface ExportFilterOptions {
   includeArtifacts: boolean;
   /** Include data tables (rendered as native tables, and as separate sheets in Excel) */
   includeTables: boolean;
+  /** Explicit list of message IDs to export. If undefined or empty, all messages are eligible. */
+  selectedMessageIds?: Array<string | number>;
 }
 
 export const DEFAULT_EXPORT_FILTER_OPTIONS: ExportFilterOptions = {

@@ -12,14 +12,20 @@ import {
   Copy,
   Download,
   X,
-  HelpCircle,
   Layers,
   Sparkles,
   Wrench,
-  Link,
+  Link as LinkIcon,
   Table as TableIcon,
   MessageSquare,
   Cpu,
+  ChevronDown,
+  ChevronUp,
+  CheckSquare,
+  Square,
+  User,
+  Bot,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { notify } from "@/lib/notifications";
@@ -120,44 +126,173 @@ export default function ExportChatModal({
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Analyze messages for metadata counters
+  // Normalize messages
+  const normalizedList = useMemo(() => normalizeMessages(messages), [messages]);
+
+  // Selected message IDs (default: select all)
+  const [selectedIds, setSelectedIds] = useState<Set<string | number>>(() => {
+    return new Set(normalizedList.map((m) => m.id));
+  });
+
+  // Track expanded message picker section
+  const [showPicker, setShowPicker] = useState(true);
+
+  // Track full-text preview per message
+  const [expandedPreviewIds, setExpandedPreviewIds] = useState<Set<string | number>>(
+    new Set(),
+  );
+
+  // Anchor for Shift+Click range selection
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
+
+  // Selection statistics
   const stats = useMemo(() => {
-    const normalized = normalizeMessages(messages);
     let userCount = 0;
     let assistantCount = 0;
+    let selectedCount = 0;
+    let selectedUserCount = 0;
+    let selectedAssistantCount = 0;
     let thinkingCount = 0;
     let toolCallCount = 0;
     let tableCount = 0;
     let sourceCount = 0;
     let artifactCount = 0;
 
-    for (const m of normalized) {
-      if (m.role === "user") userCount++;
-      else assistantCount++;
-      if (m.thinking) thinkingCount++;
-      if (m.toolCalls) toolCallCount += m.toolCalls.length;
-      if (m.tables) tableCount += m.tables.length;
-      if (m.sources) sourceCount += m.sources.length;
-      if (m.artifacts) artifactCount += m.artifacts.length;
+    for (const m of normalizedList) {
+      const isSelected = selectedIds.has(m.id);
+      if (m.role === "user") {
+        userCount++;
+        if (isSelected) selectedUserCount++;
+      } else {
+        assistantCount++;
+        if (isSelected) selectedAssistantCount++;
+      }
+
+      if (isSelected) {
+        selectedCount++;
+        if (m.thinking) thinkingCount++;
+        if (m.toolCalls) toolCallCount += m.toolCalls.length;
+        if (m.tables) tableCount += m.tables.length;
+        if (m.sources) sourceCount += m.sources.length;
+        if (m.artifacts) artifactCount += m.artifacts.length;
+      }
     }
 
     return {
-      totalMessages: normalized.length,
+      total: normalizedList.length,
       userCount,
       assistantCount,
+      selectedCount,
+      selectedUserCount,
+      selectedAssistantCount,
       thinkingCount,
       toolCallCount,
       tableCount,
       sourceCount,
       artifactCount,
     };
-  }, [messages]);
+  }, [normalizedList, selectedIds]);
 
-  const handleToggle = useCallback((key: keyof ExportFilterOptions) => {
+  // Batch Selection Handlers
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(normalizedList.map((m) => m.id)));
+  }, [normalizedList]);
+
+  const handleSelectNone = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleSelectOnlyUser = useCallback(() => {
+    const userIds = normalizedList
+      .filter((m) => m.role === "user")
+      .map((m) => m.id);
+    setSelectedIds(new Set(userIds));
+  }, [normalizedList]);
+
+  const handleSelectOnlyAssistant = useCallback(() => {
+    const assistantIds = normalizedList
+      .filter((m) => m.role === "assistant")
+      .map((m) => m.id);
+    setSelectedIds(new Set(assistantIds));
+  }, [normalizedList]);
+
+  const handleInvertSelection = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set<string | number>();
+      for (const m of normalizedList) {
+        if (!prev.has(m.id)) {
+          next.add(m.id);
+        }
+      }
+      return next;
+    });
+  }, [normalizedList]);
+
+  // Individual / Shift+Click Range Selection Handler
+  const handleToggleMessage = useCallback(
+    (index: number, id: string | number, event: React.MouseEvent) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+
+        if (event.shiftKey && lastClickedIndex !== null) {
+          // Range selection
+          const start = Math.min(lastClickedIndex, index);
+          const end = Math.max(lastClickedIndex, index);
+          const shouldSelect = !prev.has(id);
+
+          for (let i = start; i <= end; i++) {
+            const item = normalizedList[i];
+            if (item) {
+              if (shouldSelect) {
+                next.add(item.id);
+              } else {
+                next.delete(item.id);
+              }
+            }
+          }
+        } else {
+          // Single toggle
+          if (next.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+        }
+
+        return next;
+      });
+
+      setLastClickedIndex(index);
+    },
+    [lastClickedIndex, normalizedList],
+  );
+
+  const togglePreview = useCallback((id: string | number) => {
+    setExpandedPreviewIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleToggleOption = useCallback((key: keyof ExportFilterOptions) => {
     setOptions((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
+  const getEffectiveOptions = useCallback((): ExportFilterOptions => {
+    return {
+      ...options,
+      selectedMessageIds: Array.from(selectedIds),
+    };
+  }, [options, selectedIds]);
+
   const handleExport = async () => {
+    if (selectedIds.size === 0) {
+      notify(t("Please select at least one message to export"), { tone: "error" });
+      return;
+    }
+
     try {
       setExporting(true);
       const metadata = {
@@ -167,10 +302,11 @@ export default function ExportChatModal({
         workspaceName,
         exportedAt: new Date(),
       };
+      const effectiveOptions = getEffectiveOptions();
       const result = await exportSession(
         messages,
         selectedFormat,
-        options,
+        effectiveOptions,
         metadata,
       );
       triggerDownload(result.blob, result.filename);
@@ -185,6 +321,11 @@ export default function ExportChatModal({
   };
 
   const handleCopy = async () => {
+    if (selectedIds.size === 0) {
+      notify(t("Please select at least one message to copy"), { tone: "error" });
+      return;
+    }
+
     try {
       const metadata = {
         title: title || "DeepTutor Conversation",
@@ -193,7 +334,8 @@ export default function ExportChatModal({
         workspaceName,
         exportedAt: new Date(),
       };
-      await copyExportToClipboard(messages, options, metadata);
+      const effectiveOptions = getEffectiveOptions();
+      await copyExportToClipboard(messages, effectiveOptions, metadata);
       setCopied(true);
       notify(t("Copied to clipboard as Markdown"), { tone: "success" });
       setTimeout(() => setCopied(false), 2000);
@@ -211,7 +353,7 @@ export default function ExportChatModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--popover)] p-6 text-[var(--foreground)] shadow-2xl overflow-hidden max-h-[90vh]"
+        className="flex w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--popover)] p-6 text-[var(--foreground)] shadow-2xl overflow-hidden max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -222,7 +364,7 @@ export default function ExportChatModal({
               {t("Export Conversation")}
             </h2>
             <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-              {t("Save and export your dialogue with granular content toggles")}
+              {t("Choose export format, select specific messages, and toggle content elements")}
             </p>
           </div>
           <button
@@ -277,10 +419,186 @@ export default function ExportChatModal({
             </div>
           </div>
 
+          {/* Interactive Message Selection Panel */}
+          <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-[var(--card)]">
+            <div
+              className="flex items-center justify-between px-3.5 py-2.5 bg-[var(--muted)]/40 cursor-pointer hover:bg-[var(--muted)]/60 transition-colors select-none"
+              onClick={() => setShowPicker((prev) => !prev)}
+            >
+              <div className="flex items-center gap-2">
+                <CheckSquare size={15} className="text-blue-500" />
+                <span className="text-xs font-semibold tracking-wide">
+                  {t("Select Messages to Export")}
+                </span>
+                <span className="text-[11px] bg-blue-500/15 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
+                  {stats.selectedCount} / {stats.total} {t("selected")}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
+                <span className="text-[11px]">
+                  {showPicker ? t("Collapse") : t("Customize")}
+                </span>
+                {showPicker ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </div>
+            </div>
+
+            {showPicker && (
+              <div className="p-3 space-y-2.5 border-t border-[var(--border)]">
+                {/* Batch Actions Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2 border-b border-[var(--border)]/60">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handleSelectAll}
+                      className="px-2 py-1 rounded bg-[var(--muted)] hover:bg-[var(--muted)]/80 text-[11px] font-medium transition-colors"
+                    >
+                      {t("Select All")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSelectNone}
+                      className="px-2 py-1 rounded bg-[var(--muted)] hover:bg-[var(--muted)]/80 text-[11px] font-medium transition-colors"
+                    >
+                      {t("Select None")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSelectOnlyUser}
+                      className="px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[11px] font-medium transition-colors"
+                    >
+                      {t("Only Questions")} ({stats.userCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSelectOnlyAssistant}
+                      className="px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 text-[11px] font-medium transition-colors"
+                    >
+                      {t("Only Answers")} ({stats.assistantCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleInvertSelection}
+                      className="px-2 py-1 rounded bg-[var(--muted)] hover:bg-[var(--muted)]/80 text-[11px] font-medium transition-colors"
+                    >
+                      {t("Invert")}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-[var(--muted-foreground)] hidden sm:inline">
+                    {t("Tip: Shift+click to select range")}
+                  </span>
+                </div>
+
+                {/* Message List Items */}
+                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1 divide-y divide-[var(--border)]/30">
+                  {normalizedList.map((m, index) => {
+                    const isSelected = selectedIds.has(m.id);
+                    const isUser = m.role === "user";
+                    const isExpanded = expandedPreviewIds.has(m.id);
+                    const previewText = m.content.replace(/\n+/g, " ").trim().slice(0, 110);
+
+                    return (
+                      <div
+                        key={m.id}
+                        className={`pt-1.5 first:pt-0 transition-colors rounded-lg p-1.5 ${
+                          isSelected ? "bg-[var(--muted)]/20" : "opacity-60 hover:opacity-100"
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          {/* Checkbox */}
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onClick={(e) => handleToggleMessage(index, m.id, e)}
+                            onChange={() => {}}
+                            className="mt-0.5 rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                          />
+
+                          {/* Message Row Header */}
+                          <div
+                            className="flex-1 min-w-0 cursor-pointer"
+                            onClick={(e) => handleToggleMessage(index, m.id, e)}
+                          >
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-mono text-[var(--muted-foreground)]">
+                                #{index + 1}
+                              </span>
+                              <span
+                                className={`text-[11px] font-semibold flex items-center gap-1 px-1.5 py-0.2 rounded ${
+                                  isUser
+                                    ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                                    : "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                                }`}
+                              >
+                                {isUser ? <User size={10} /> : <Bot size={10} />}
+                                {m.speaker || (isUser ? t("User") : t("DeepTutor"))}
+                              </span>
+                              {m.capability && (
+                                <span className="text-[10px] text-[var(--muted-foreground)] bg-[var(--muted)] px-1.5 py-0.2 rounded">
+                                  {m.capability}
+                                </span>
+                              )}
+
+                              {/* Traces badges */}
+                              {m.thinking && (
+                                <span className="text-[9px] bg-purple-500/15 text-purple-600 dark:text-purple-400 px-1 py-0.2 rounded">
+                                  {t("Reasoning")}
+                                </span>
+                              )}
+                              {m.toolCalls && m.toolCalls.length > 0 && (
+                                <span className="text-[9px] bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1 py-0.2 rounded">
+                                  {m.toolCalls.length} {t("tools")}
+                                </span>
+                              )}
+                              {m.tables && m.tables.length > 0 && (
+                                <span className="text-[9px] bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 px-1 py-0.2 rounded">
+                                  {m.tables.length} {t("table")}
+                                </span>
+                              )}
+                              {m.sources && m.sources.length > 0 && (
+                                <span className="text-[9px] bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 px-1 py-0.2 rounded">
+                                  {m.sources.length} {t("citations")}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Snippet Preview */}
+                            <p className="text-[11px] text-[var(--muted-foreground)] mt-1 truncate">
+                              {previewText || <span className="italic">{t("(Attachment/tool result only)")}</span>}
+                            </p>
+                          </div>
+
+                          {/* Full Preview Toggle */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePreview(m.id);
+                            }}
+                            className="text-[10px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] p-1 rounded hover:bg-[var(--muted)] transition-colors"
+                          >
+                            {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
+                        </div>
+
+                        {/* Expanded Full Preview */}
+                        {isExpanded && (
+                          <div className="mt-2 p-2 rounded bg-[var(--muted)]/40 border border-[var(--border)] text-[11px] font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
+                            {m.content}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Granular Content Toggles */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <label className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] flex items-center gap-1.5">
+                <SlidersHorizontal size={13} />
                 {t("Content Elements to Include")}
               </label>
               <span className="text-[11px] text-[var(--muted-foreground)]">
@@ -298,7 +616,7 @@ export default function ExportChatModal({
                 <input
                   type="checkbox"
                   checked={options.includeUserPrompts}
-                  onChange={() => handleToggle("includeUserPrompts")}
+                  onChange={() => handleToggleOption("includeUserPrompts")}
                   className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4"
                 />
               </label>
@@ -317,7 +635,7 @@ export default function ExportChatModal({
                 <input
                   type="checkbox"
                   checked={options.includeThinking}
-                  onChange={() => handleToggle("includeThinking")}
+                  onChange={() => handleToggleOption("includeThinking")}
                   className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4"
                 />
               </label>
@@ -336,7 +654,7 @@ export default function ExportChatModal({
                 <input
                   type="checkbox"
                   checked={options.includeToolCalls}
-                  onChange={() => handleToggle("includeToolCalls")}
+                  onChange={() => handleToggleOption("includeToolCalls")}
                   className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4"
                 />
               </label>
@@ -350,7 +668,7 @@ export default function ExportChatModal({
                 <input
                   type="checkbox"
                   checked={options.includeToolResults}
-                  onChange={() => handleToggle("includeToolResults")}
+                  onChange={() => handleToggleOption("includeToolResults")}
                   className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4"
                 />
               </label>
@@ -358,7 +676,7 @@ export default function ExportChatModal({
               {/* Web / RAG Citations */}
               <label className="flex items-center justify-between p-2 rounded-lg hover:bg-[var(--muted)]/50 cursor-pointer text-xs">
                 <div className="flex items-center gap-2">
-                  <Link size={14} className="text-cyan-500" />
+                  <LinkIcon size={14} className="text-cyan-500" />
                   <span>{t("Web & RAG Citations")}</span>
                   {stats.sourceCount > 0 && (
                     <span className="text-[10px] bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 px-1.5 py-0.2 rounded-full">
@@ -369,7 +687,7 @@ export default function ExportChatModal({
                 <input
                   type="checkbox"
                   checked={options.includeSources}
-                  onChange={() => handleToggle("includeSources")}
+                  onChange={() => handleToggleOption("includeSources")}
                   className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4"
                 />
               </label>
@@ -388,7 +706,7 @@ export default function ExportChatModal({
                 <input
                   type="checkbox"
                   checked={options.includeTables}
-                  onChange={() => handleToggle("includeTables")}
+                  onChange={() => handleToggleOption("includeTables")}
                   className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4"
                 />
               </label>
@@ -407,7 +725,7 @@ export default function ExportChatModal({
                 <input
                   type="checkbox"
                   checked={options.includeArtifacts}
-                  onChange={() => handleToggle("includeArtifacts")}
+                  onChange={() => handleToggleOption("includeArtifacts")}
                   className="rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4"
                 />
               </label>
@@ -417,9 +735,9 @@ export default function ExportChatModal({
           {/* Conversation Summary Bar */}
           <div className="flex items-center justify-between text-[11px] text-[var(--muted-foreground)] bg-[var(--muted)]/20 px-3 py-2 rounded-lg border border-[var(--border)]">
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              {stats.totalMessages} {t("messages total")} (
-              {stats.userCount} {t("user")}, {stats.assistantCount} {t("assistant")})
+              <span className={`h-2 w-2 rounded-full ${stats.selectedCount > 0 ? "bg-emerald-500" : "bg-red-500"}`} />
+              {stats.selectedCount} / {stats.total} {t("messages selected")} (
+              {stats.selectedUserCount} {t("user")}, {stats.selectedAssistantCount} {t("assistant")})
             </span>
             {workspaceName && (
               <span className="truncate max-w-[200px]">
@@ -434,7 +752,8 @@ export default function ExportChatModal({
           <button
             type="button"
             onClick={handleCopy}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-medium hover:bg-[var(--muted)] transition-colors"
+            disabled={selectedIds.size === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-medium hover:bg-[var(--muted)] disabled:opacity-40 transition-colors"
           >
             {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
             {copied ? t("Copied!") : t("Copy Markdown")}
@@ -451,7 +770,7 @@ export default function ExportChatModal({
             <button
               type="button"
               onClick={handleExport}
-              disabled={exporting || messages.length === 0}
+              disabled={exporting || selectedIds.size === 0}
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
             >
               <Download size={14} />
