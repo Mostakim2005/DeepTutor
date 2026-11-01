@@ -43,6 +43,18 @@ class CommandCodeBackend(SubagentBackend):
             detail="" if ok else (text or "cmdc CLI not found on PATH"),
         )
 
+    def _session_exists(self, sid: str) -> bool:
+        if not sid:
+            return False
+        base = Path.home() / ".commandcode" / "projects"
+        if not base.exists():
+            return False
+        for proj in base.iterdir():
+            if proj.is_dir():
+                if (proj / sid).exists() or any(sid in d.name for d in proj.iterdir()):
+                    return True
+        return False
+
     def _build_command(
         self,
         question: str,
@@ -57,10 +69,8 @@ class CommandCodeBackend(SubagentBackend):
             "--output-format",
             "json",
         ]
-        if session_id:
+        if session_id and self._session_exists(session_id):
             cmd += ["--session", session_id]
-        else:
-            cmd.append("--no-session")
 
         if config.auto_approve:
             cmd.append("--yolo")

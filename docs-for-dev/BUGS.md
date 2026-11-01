@@ -51,3 +51,13 @@
 - **Symptom**: Calling Gemini models via Google AI Studio free tier key consistently timed out on `gemini-3.8-flash` or failed with HTTP 429 (`You exceeded your current quota`) on `gemini-4-argon`.
 - **RCA**: Free tier Google AI Studio accounts allocate zero quota for `gemini-4-argon` and experience frequent server-side timeouts on `gemini-3.8-flash`, while `gemini-3.6-flash` and `gemini-3.5-flash` succeed reliably with HTTP 200.
 - **Resolution**: Pruned `gemini-4-argon` and `gemini-3.8-flash` from DeepTutor's `llm-profile-gemini-main` catalog, retaining `gemini-3.6-flash` as the active default alongside `gemini-3.5-flash`.
+
+### BUG-011: Command Code CLI Exits with Code 1 on Unminted Synthetic Session ID
+- **Symptom**: Selecting Command-Code (Go Plan) in Handoff / Subagent mode failed with `cmdc exited with code 1`.
+- **RCA**: DeepTutor passed an unminted synthetic session ID (`dt-...`) via `--session <id>`. Command Code (`cmdc`) strictly validates that `--session <id>` matches an existing session transcript in `~/.commandcode/projects`. If the session does not exist on disk, `cmdc` aborts with `Error: --session "<id>" is neither an existing .jsonl transcript nor a known session-id prefix`.
+- **Resolution**: Added `_session_exists()` helper in `deeptutor/services/subagent/command_code.py` to inspect `~/.commandcode/projects`. Only pass `--session <id>` if the session already exists on disk; allow initial turns to start cleanly and mint valid session IDs.
+
+### BUG-012: OpenCode v2.2.5 Route Migration (405 Method Not Allowed) and Default Paid Model (402)
+- **Symptom**: Selecting OpenCode in Handoff / Subagent mode failed with `Client error '405 Method Not Allowed' for url 'http://127.0.0.1:.../session'`.
+- **RCA**: OpenCode Desktop v2.2.5 moved REST endpoints under `/api/` (`/api/session`, `/api/event`, `/api/session/{sid}/prompt`), while root paths serve web UI assets. Additionally, OpenCode defaults newly minted sessions to `particle-ai/particle-1` on the `kilo` provider, which returns HTTP 402 unless the session model is explicitly configured.
+- **Resolution**: Updated `deeptutor/services/subagent/opencode_family.py` to target `/api/session`, `/api/event`, and `/api/session/{sid}/prompt`. Added `_configure_session_model()` to configure the session model (e.g. `openrouter/openrouter/free`) via `POST /api/session/{sid}/model`.

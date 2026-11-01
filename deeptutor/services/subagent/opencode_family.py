@@ -148,25 +148,72 @@ class OpencodeFamilyBackend(SubagentBackend):
                 sid = session_id or await self._create_session(client)
                 result.session_id = sid
 
+                await self._configure_session_model(client, sid, config)
+
                 attached = asyncio.Event()
                 listener = asyncio.create_task(
                     self._listen(client, sid, state, emit, attached, config)
                 )
                 await _wait_attached(listener, attached)
 
-                body = self._prompt_body(
-                    question, config=config, images=images, fresh_session=fresh_session
-                )
+                # Try OpenCode v2 prompt endpoint first, then legacy v1 endpoint
+                v2_sent = False
+                p_text = question
+                if fresh_session and config.system_prompt.strip():
+                    p_text = f"{config.system_prompt.strip()}\n\n{question}"
                 try:
-                    response = await client.post(f"/session/{sid}/message", json=body)
-                    response.raise_for_status()
-                except asyncio.CancelledError:
-                    # The user aborted the turn — best-effort stop the run so
-                    # the agent doesn't keep working into a dead session.
-                    with_abort = client.post(f"/session/{sid}/abort", timeout=5.0)
-                    await asyncio.shield(_swallow(with_abort))
-                    raise
-                result.final_text = _text_from_parts(_response_parts(response))
+                    res_p = await client.post(
+                        f"/api/session/{sid}/prompt", json={"text": p_text}
+                    )
+                    if res_p.status_code in (200, 201):
+                        v2_sent = True
+                except Exception:
+                    pass
+
+                if not v2_sent:
+                    body = self._prompt_body(
+                        question, config=config, images=images, fresh_session=fresh_session
+                    )
+                    try:
+                        response = await client.post(f"/session/{sid}/message", json=body)
+                        response.raise_for_status()
+                        result.final_text = _text_from_parts(_response_parts(response))
+                    except asyncio.CancelledError:
+                        # The user aborted the turn — best-effort stop the run so
+                        # the agent doesn't keep working into a dead session.
+                        with_abort = client.post(f"/session/{sid}/abort", timeout=5.0)
+                        await asyncio.shield(_swallow(with_abort))
+                        raise
+                else:
+                    # Poll /api/session/{sid}/message for completion
+                    for _ in range(60):
+                        if state.get("completed"):
+                            break
+                        await asyncio.sleep(1.0)
+                        try:
+                            msg_res = await client.get(f"/api/session/{sid}/message")
+                            if msg_res.status_code == 200:
+                                msgs = msg_res.json().get("data", [])
+                                for m in msgs:
+                                    if m.get("type") == "assistant":
+                                        content_parts = m.get("content", [])
+                                        texts = [
+                                            p.get("text", "")
+                                            for p in content_parts
+                                            if p.get("type") == "text" and p.get("text")
+                                        ]
+                                        if texts:
+                                            result.final_text = "\n\n".join(texts).strip()
+                                        if m.get("finish") in ("stop", "complete"):
+                                            state["completed"] = True
+                                            break
+                                        if m.get("finish") == "error":
+                                            err_msg = m.get("error", {}).get("message", "Error in OpenCode generation")
+                                            state["error"] = err_msg
+                                            state["completed"] = True
+                                            break
+                        except Exception:
+                            pass
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -194,13 +241,40 @@ class OpencodeFamilyBackend(SubagentBackend):
         return result
 
     async def _create_session(self, client: httpx.AsyncClient) -> str:
-        response = await client.post("/session", json={"title": "DeepTutor consult"})
-        response.raise_for_status()
-        data = response.json()
-        sid = str(data.get("id") or "") if isinstance(data, dict) else ""
-        if not sid:
-            raise RuntimeError("server created a session without an id")
-        return sid
+        for path in ("/api/session", "/session"):
+            try:
+                response = await client.post(path, json={"title": "DeepTutor consult"})
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    sid = str(data.get("data", {}).get("id") or data.get("id") or "")
+                    if sid:
+                        return sid
+            except Exception:
+                continue
+        raise RuntimeError("server created a session without an id")
+
+    async def _configure_session_model(
+        self, client: httpx.AsyncClient, sid: str, config: BackendConfig
+    ) -> None:
+        model = (config.model or "openrouter/openrouter/free").strip()
+        if model in ("openrouter/free", "openrouter", "openrouter/openrouter/free"):
+            provider, model_id = "openrouter", "openrouter/free"
+        elif model.startswith("openrouter/"):
+            provider = "openrouter"
+            parts = model.split("/", 1)
+            model_id = parts[1] if parts[1].startswith("openrouter/") else model
+        elif "/" in model:
+            provider, model_id = model.split("/", 1)
+        else:
+            provider, model_id = "opencode", model
+        try:
+            await client.post(
+                f"/api/session/{sid}/model",
+                json={"model": {"id": model_id, "providerID": provider}},
+                timeout=5.0,
+            )
+        except Exception as exc:
+            logger.debug("opencode model configure skipped: %s", exc)
 
     def _prompt_body(
         self,
@@ -238,16 +312,22 @@ class OpencodeFamilyBackend(SubagentBackend):
         config: BackendConfig,
     ) -> None:
         """Consume the SSE bus, mapping this session's events onto the trace."""
-        async with client.stream("GET", "/event") as response:
-            response.raise_for_status()
-            attached.set()
-            async for line in response.aiter_lines():
-                if not line.startswith("data:"):
-                    continue
-                event = _parse_json(line[5:])
-                if event is None:
-                    continue
-                await self._handle_bus_event(event, sid, state, emit, client, config)
+        for path in ("/api/event", "/event"):
+            try:
+                async with client.stream("GET", path) as response:
+                    if response.status_code == 200:
+                        attached.set()
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            event = _parse_json(line[5:])
+                            if event is None:
+                                continue
+                            await self._handle_bus_event(event, sid, state, emit, client, config)
+                        return
+            except Exception:
+                continue
+        attached.set()
 
     async def _handle_bus_event(
         self,
