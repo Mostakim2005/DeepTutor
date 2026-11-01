@@ -212,6 +212,11 @@ class OpencodeFamilyBackend(SubagentBackend):
                                             state["error"] = err_msg
                                             state["completed"] = True
                                             break
+                                    if m.get("type") == "idle" and m.get("outcome") == "failed":
+                                        err_msg = m.get("error", {}).get("message", "OpenCode execution failed")
+                                        state["error"] = err_msg
+                                        state["completed"] = True
+                                        break
                         except Exception:
                             pass
         except asyncio.CancelledError:
@@ -267,12 +272,23 @@ class OpencodeFamilyBackend(SubagentBackend):
             provider, model_id = model.split("/", 1)
         else:
             provider, model_id = "opencode", model
+
+        payload: dict[str, Any] = {"id": model_id, "providerID": provider}
+        if config.effort and "mimo" not in model_id.lower():
+            effort = config.effort.lower().strip()
+            if effort in ("high", "max"):
+                payload["variant"] = "high"
+            elif effort in ("minimal", "low"):
+                payload["variant"] = "low"
+            # Omit variant for default/medium to use provider default
+
         try:
-            await client.post(
+            res = await client.post(
                 f"/api/session/{sid}/model",
-                json={"model": {"id": model_id, "providerID": provider}},
+                json={"model": payload},
                 timeout=5.0,
             )
+            logger.debug("opencode model configure status=%s body=%s", res.status_code, res.text)
         except Exception as exc:
             logger.debug("opencode model configure skipped: %s", exc)
 

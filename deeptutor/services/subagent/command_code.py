@@ -51,8 +51,11 @@ class CommandCodeBackend(SubagentBackend):
             return False
         for proj in base.iterdir():
             if proj.is_dir():
-                if (proj / sid).exists() or any(sid in d.name for d in proj.iterdir()):
+                if (proj / f"{sid}.jsonl").exists():
                     return True
+                for f in proj.glob("*.jsonl"):
+                    if not f.name.endswith(".checkpoints.jsonl") and f.name.startswith(sid):
+                        return True
         return False
 
     def _build_command(
@@ -77,7 +80,13 @@ class CommandCodeBackend(SubagentBackend):
         if config.model:
             cmd += ["--model", config.model]
         if config.effort:
-            cmd += ["--effort", config.effort]
+            effort = config.effort.lower().strip()
+            if effort in ("medium", "default"):
+                effort = "high"
+            elif effort in ("none", "minimal"):
+                effort = "off"
+            if effort in ("off", "low", "high", "max"):
+                cmd += ["--effort", effort]
         cmd += list(config.extra_args)
         return cmd
 
@@ -102,16 +111,19 @@ class CommandCodeBackend(SubagentBackend):
             result.event_count += 1
             await on_event(SubagentEvent(kind=kind, text=text, raw=raw, meta=meta or {}))
 
+        stderr_lines: list[str] = []
         try:
             async for channel, line in stream_process_lines(cmd, cwd=cwd):
                 if channel == "exit":
                     if line != "0" and result.success and not result.final_text:
                         result.success = False
-                        result.error = f"cmdc exited with code {line}"
-                        await emit(EVENT_ERROR, result.error, {"returncode": line})
+                        err_detail = " ".join(stderr_lines).strip()
+                        result.error = f"cmdc exited with code {line}: {err_detail}" if err_detail else f"cmdc exited with code {line}"
+                        await emit(EVENT_ERROR, result.error, {"returncode": line, "stderr": err_detail})
                     continue
                 if channel == "stderr":
                     if line.strip():
+                        stderr_lines.append(line.strip())
                         await emit(EVENT_LOG, line, {"stream": "stderr"})
                     continue
 

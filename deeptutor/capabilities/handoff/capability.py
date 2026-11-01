@@ -380,6 +380,12 @@ class HandoffCapability(TurnCapability):
 
         settings = load_subagent_settings()
         config = settings.backend(kind)
+        model_override = str(meta.get("model") or "").strip()
+        effort_override = str(meta.get("effort") or "").strip()
+        if model_override:
+            config = replace(config, model=model_override)
+        if effort_override:
+            config = replace(config, effort=effort_override)
         if not config.system_prompt.strip():
             config = replace(config, system_prompt=_HANDOFF_INSTRUCTION)
         registry_key, session_id = _session(context, name)

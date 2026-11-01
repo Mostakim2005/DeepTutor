@@ -99,7 +99,7 @@ _DEEPSEEK_HARNESS_EFFORTS = (
     "max",
     "ultra",
 )
-_COMMAND_CODE_EFFORTS = ("low", "medium", "high", "max")
+_COMMAND_CODE_EFFORTS = ("off", "low", "high", "max")
 _COMMAND_CODE_DEFAULT_MODELS = (
     ("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash"),
     ("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash"),

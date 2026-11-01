@@ -61,3 +61,13 @@
 - **Symptom**: Selecting OpenCode in Handoff / Subagent mode failed with `Client error '405 Method Not Allowed' for url 'http://127.0.0.1:.../session'`.
 - **RCA**: OpenCode Desktop v2.2.5 moved REST endpoints under `/api/` (`/api/session`, `/api/event`, `/api/session/{sid}/prompt`), while root paths serve web UI assets. Additionally, OpenCode defaults newly minted sessions to `particle-ai/particle-1` on the `kilo` provider, which returns HTTP 402 unless the session model is explicitly configured.
 - **Resolution**: Updated `deeptutor/services/subagent/opencode_family.py` to target `/api/session`, `/api/event`, and `/api/session/{sid}/prompt`. Added `_configure_session_model()` to configure the session model (e.g. `openrouter/openrouter/free`) via `POST /api/session/{sid}/model`.
+
+### BUG-013: Command Code `Unknown effort "medium"` CLI Rejection
+- **Symptom**: Selecting Command-Code in Handoff / Subagent mode failed with `cmdc exited with code 1`.
+- **RCA**: DeepTutor's subagent configuration injected `"effort": "medium"`, but Command Code CLI strictly validates `--effort` and only supports `[off, low, high, max]`. When given `--effort medium`, `cmdc` printed `Unknown effort "medium". Supported: off, low, high, max.` and exited with code 1. Furthermore, `_session_exists` matched any file containing the UUID (including checkpoints and metadata) rather than an existing `.jsonl` transcript.
+- **Resolution**: Added effort normalization in `command_code.py` to map `"medium"` / `"default"` to `"high"` and `"none"` / `"minimal"` to `"off"`, updated `_COMMAND_CODE_EFFORTS` in `models.py`, attached `stderr` lines to `result.error` for diagnostic transparency, and verified `.jsonl` transcript existence in `_session_exists`.
+
+### BUG-014: Handoff Capability Ignored Knowledge Base Subagent Model & Effort Overrides
+- **Symptom**: Selecting specific subagent models in the Preferences dropdown always routed to the global backend model rather than the selected option.
+- **RCA**: `_subagent()` in `deeptutor/capabilities/handoff/capability.py` loaded `config = settings.backend(kind)` without overriding `model` and `effort` from the resolved KB metadata.
+- **Resolution**: Updated `_subagent()` to apply `meta.get("model")` and `meta.get("effort")` onto the effective `BackendConfig`, enabled `variant` payload support in `opencode_family.py` for models supporting reasoning variants, and added dedicated KB entries for OpenCode and Command Code models.
