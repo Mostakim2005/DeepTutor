@@ -2859,6 +2859,7 @@ export default function ChatWorkspace() {
                   </div>
                   {selectedPassage ? (
                     <SelectionActions
+                      text={selectedPassage.text}
                       anchor={selectedPassage.anchor}
                       agents={agentOptions}
                       onAddToChat={addSelectedPassageToChat}
