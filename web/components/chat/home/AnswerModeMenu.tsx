@@ -7,6 +7,8 @@ import { useTranslation } from "react-i18next";
 import { agentGlyph, agentKindLabel } from "@/components/agents/agent-icons";
 import PartnerAvatar from "@/components/partners/PartnerAvatar";
 import { listPersonas, type PersonaInfo } from "@/lib/personas-api";
+import { requestVoid } from "@/shared/api/client";
+import Tooltip from "@/shared/ui/Tooltip";
 import type { PartnerInfo } from "@/lib/partners-api";
 import type { PartnerGroup } from "@/lib/partner-groups-api";
 import type { ResourceKind } from "@/lib/resource-reuse";
@@ -149,44 +151,46 @@ function ModelPreferenceActions({
   const { t } = useTranslation();
   return (
     <span className="flex items-center gap-1 z-10" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onTogglePin(name);
-        }}
-        className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/15 transition-all text-muted-foreground/40 hover:text-amber-400"
-        title={isPinned ? t("Unpin model") : t("Pin model")}
-        aria-label={isPinned ? t("Unpin model") : t("Pin model")}
-      >
-        <Star
-          size={13}
-          strokeWidth={1.8}
-          className={
-            isPinned
-              ? "text-amber-400 fill-amber-400 filter drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
-              : "transition-colors"
-          }
-        />
-      </button>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onToggleHide(name);
-        }}
-        className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/15 transition-all"
-        title={isHidden ? t("Show model") : t("Hide model")}
-        aria-label={isHidden ? t("Show model") : t("Hide model")}
-      >
-        {isHidden ? (
-          <EyeOff size={13} strokeWidth={1.8} className="text-rose-400 hover:text-rose-300 transition-colors" />
-        ) : (
-          <Eye size={13} strokeWidth={1.8} className="text-muted-foreground/50 hover:text-foreground transition-colors" />
-        )}
-      </button>
+      <Tooltip label={isPinned ? t("Unpin model") : t("Pin model")}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onTogglePin(name);
+          }}
+          className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/15 transition-all text-muted-foreground/40 hover:text-amber-400"
+          aria-label={isPinned ? t("Unpin model") : t("Pin model")}
+        >
+          <Star
+            size={13}
+            strokeWidth={1.8}
+            className={
+              isPinned
+                ? "text-amber-400 fill-amber-400 filter drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
+                : "transition-colors"
+            }
+          />
+        </button>
+      </Tooltip>
+      <Tooltip label={isHidden ? t("Show model") : t("Hide model")}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggleHide(name);
+          }}
+          className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/15 transition-all"
+          aria-label={isHidden ? t("Show model") : t("Hide model")}
+        >
+          {isHidden ? (
+            <EyeOff size={13} strokeWidth={1.8} className="text-rose-400 hover:text-rose-300 transition-colors" />
+          ) : (
+            <Eye size={13} strokeWidth={1.8} className="text-muted-foreground/50 hover:text-foreground transition-colors" />
+          )}
+        </button>
+      </Tooltip>
     </span>
   );
 }
@@ -221,12 +225,12 @@ function AnswerList({
     new Set((answerers?.agents ?? []).filter((item) => item.isHidden).map((item) => item.name)),
   );
 
-  useEffect(() => {
-    if (answerers?.agents) {
-      setPinnedNames(new Set(answerers.agents.filter((item) => item.isPinned).map((item) => item.name)));
-      setHiddenNames(new Set(answerers.agents.filter((item) => item.isHidden).map((item) => item.name)));
-    }
-  }, [answerers?.agents]);
+  const [syncedAgents, setSyncedAgents] = useState(answerers?.agents);
+  if (answerers?.agents && answerers.agents !== syncedAgents) {
+    setSyncedAgents(answerers.agents);
+    setPinnedNames(new Set(answerers.agents.filter((item) => item.isPinned).map((item) => item.name)));
+    setHiddenNames(new Set(answerers.agents.filter((item) => item.isHidden).map((item) => item.name)));
+  }
 
   const handleTogglePin = useCallback(async (modelName: string) => {
     setPinnedNames((prev) => {
@@ -236,7 +240,7 @@ function AnswerList({
       return next;
     });
     try {
-      await fetch("/api/settings/model-preferences/toggle-pin", {
+      await requestVoid("/api/settings/model-preferences/toggle-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: modelName }),
@@ -254,7 +258,7 @@ function AnswerList({
       return next;
     });
     try {
-      await fetch("/api/settings/model-preferences/toggle-hide", {
+      await requestVoid("/api/settings/model-preferences/toggle-hide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: modelName }),
@@ -499,12 +503,12 @@ function PartnerLinkList({
     new Set((agents?.options ?? []).filter((item) => item.isHidden).map((item) => item.name)),
   );
 
-  useEffect(() => {
-    if (agents?.options) {
-      setPinnedNames(new Set(agents.options.filter((item) => item.isPinned).map((item) => item.name)));
-      setHiddenNames(new Set(agents.options.filter((item) => item.isHidden).map((item) => item.name)));
-    }
-  }, [agents?.options]);
+  const [syncedOptions, setSyncedOptions] = useState(agents?.options);
+  if (agents?.options && agents.options !== syncedOptions) {
+    setSyncedOptions(agents.options);
+    setPinnedNames(new Set(agents.options.filter((item) => item.isPinned).map((item) => item.name)));
+    setHiddenNames(new Set(agents.options.filter((item) => item.isHidden).map((item) => item.name)));
+  }
 
   const handleTogglePin = useCallback(async (modelName: string) => {
     setPinnedNames((prev) => {
@@ -514,7 +518,7 @@ function PartnerLinkList({
       return next;
     });
     try {
-      await fetch("/api/settings/model-preferences/toggle-pin", {
+      await requestVoid("/api/settings/model-preferences/toggle-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: modelName }),
@@ -532,7 +536,7 @@ function PartnerLinkList({
       return next;
     });
     try {
-      await fetch("/api/settings/model-preferences/toggle-hide", {
+      await requestVoid("/api/settings/model-preferences/toggle-hide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: modelName }),

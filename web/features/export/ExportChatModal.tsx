@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { notify } from "@/lib/notifications";
+import Tooltip from "@/shared/ui/Tooltip";
 import {
   exportSession,
   triggerDownload,
@@ -793,16 +794,19 @@ export default function ExportChatModal({
               {t("Cancel")}
             </button>
             {selectedFormat === "pdf" && (
-              <button
-                type="button"
-                onClick={handlePrintPdf}
-                disabled={exporting || selectedIds.size === 0}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-blue-500/40 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors shadow-sm"
-                title={t("Save as publication-grade vector PDF with vector KaTeX math and native Unicode fonts (matching Claude export)")}
+              <Tooltip
+                label={t("Save as publication-grade vector PDF with vector KaTeX math and native Unicode fonts (matching Claude export)")}
               >
-                <Printer size={14} />
-                {t("Print / Save Vector PDF")}
-              </button>
+                <button
+                  type="button"
+                  onClick={handlePrintPdf}
+                  disabled={exporting || selectedIds.size === 0}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-blue-500/40 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs font-medium hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors shadow-sm"
+                >
+                  <Printer size={14} />
+                  {t("Print / Save Vector PDF")}
+                </button>
+              </Tooltip>
             )}
             <button
               type="button"

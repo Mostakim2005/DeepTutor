@@ -10,7 +10,10 @@ data/
 /multi-user/
 # Developer and agent documentation is tracked in docs-for-dev/.
 # Keep obsolete local notes and downloaded references out of the repository.
+# Exception: the agent protocol's suite lives in docs/ (AGENTS.md section 3).
 /docs/
+!/docs/
+!/docs/**
 /docs-for-use/
 /docs-for-user/
 /design-qa.md

@@ -1,186 +1,106 @@
-# DeepTutor — Agent-Native Architecture
+# Universal Operating Protocol (`AGENTS.md`)
+**MANDATORY FOR ALL AI CODING AGENTS**
 
-## Overview
+## 1. User Profile, Agency & Voice-Dictation Decoder
 
-DeepTutor is an **agent-native** intelligent learning companion organized
-around a two-layer plugin model — single-shot **Tools** invoked by the
-LLM, and multi-stage **Capabilities** that take over a turn — exposed
-through three entry points: CLI, WebSocket API, and Python SDK. All three
-enter the durable turn application service before the shared turn engine
-routes a normalized context to the selected capability.
+- **Non-Coder Product Architect:** The user is the architect and decision-maker, not a programmer. Never display raw code diffs or code blocks when explaining plans, previews, or options. Communicate using plain English, Mermaid diagrams, tables, or visual HTML/SVG previews.
+- **High-Level Agency:** Operate with autonomous engineering judgment. Rely on high-level intent, architecture, and desired outcomes rather than waiting for micromanaged step-by-step CLI instructions.
+- **South Asian Voice-Dictation Input:** Prompts are voice-typed by a South Asian English speaker. Expect phonetic mishearings, nasalized sound substitutions, repeated words, fillers, and fragmented phrasing. Silently ignore fillers and auto-correct likely mishearings from project context.
 
-## Architecture
+## 2. Instruction Triage & Numbered Confirmation Gate
 
-```
-Entry Points:  CLI (Typer)  |  WebSocket /ws  |  Python SDK
-                    ↓                   ↓                   ↓
-              ┌─────────────────────────────────────────────────┐
-              │          TurnApplicationService                 │
-              │   persists, coordinates, and replays turns      │
-              └──────────────────────┬──────────────────────────┘
-                                     ↓
-              ┌─────────────────────────────────────────────────┐
-              │       TurnEngine → ChatOrchestrator              │
-              │   routes UnifiedContext → selected Capability    │
-              │   (defaults to `chat`)                           │
-              └──────────┬──────────────┬───────────────────────┘
-                         │              │
-              ┌──────────▼──┐  ┌────────▼──────────┐
-              │ ToolRegistry │  │ CapabilityRegistry │
-              │  (Level 1)   │  │   (Level 2)        │
-              └──────────────┘  └────────────────────┘
-```
+Before modifying files, triage the prompt into one of three paths:
 
-`TurnApplicationService` owns durable turn state and replay through the
-session store and runtime coordinator. Each execution uses a per-turn
-`StreamBus`; the orchestrator emits events, the turn runtime persists them,
-and adapters replay them to consumers. Runtime settings live in
-`data/user/settings/*.json` — project-root `.env` files are intentionally
-ignored.
+- **Path A: Fast Path (Direct Execution):** For small tweaks, clear bug fixes, routine operations, or continuing an approved plan. State a 1-line assumption of intent and execute immediately.
+- **Path B: Intent Confirmation Gate (New, Complex, or Ambiguous Tasks):** For new features, multi-step changes, architectural shifts, or ambiguous dictation where a wrong guess wastes work. Do NOT write code yet. Output ONLY a structured Intent Rephrase using numbered/lettered tags so the user can reply easily by voice (e.g., *"1 is yes, for 2 pick B"*):
+  - **`[1] Core Goal:`** 1–2 sentences on the intended outcome.
+  - **`[2] Clarifications / Options (if needed):`** Concrete choices labeled `[2A]`, `[2B]`, `[2C]` with brief plain-English trade-offs.
+  - **`[3] Planned Impact:`** Bullet list of user-visible features or files affected.
+  - **Wait:** Stop and wait for approval before executing.
+- **Path C: Visual Preview Path (On Request):** When the user asks for an example, preview, or how a change will look. Never preview raw code:
+  - **UI/UX Changes:** Generate a self-contained HTML/SVG visual mock or wireframe showing Before vs. After.
+  - **Logic/Flow Changes:** Render a Mermaid flowchart of the user or data flow.
+  - **File/System Operations:** Present a Before -> After Action Table (Target | Action | Outcome).
 
-### Level 1 — Tools
+## 3. Progressive Search-First Documentation & Visual Dashboard
 
-Single-function tools the LLM picks on demand. Eight user-toggleable tools
-surface in `/settings/tools`:
+- **Search-First Discovery (Protect Context):** Never bulk-read the entire documentation folder on startup and never create an `INDEX.md` file. Every documentation section must use a descriptive slug header with natural-language aliases (`### [TYPE: Descriptive-Slug] | Aliases: ...`) followed immediately by a single-line `> **1-Line Summary:**`. Scan headers and 1-line summaries first; read full sections only when relevant to the active task.
+- **Function/Symbol Anchors Only:** Never use line numbers as code anchors. Reference file paths paired with exact function, class, or variable names.
+- **Template Resolution (GitHub vs. Local Fallback):** Load documentation blueprints from the master `.agent-templates` repository on `https://github.com/Mostakim2005` or the local fallback directory `C:\Users\kazir\.agent-templates\` — always checking both and using whichever exists or has the latest modifications.
+- **Core Documentation Suite (`docs/`):**
+  - `docs/PRODUCT.md` — Permanent source of truth for user intentions, active feature checklist, and merge wishlist.
+  - `docs/ARCHITECTURE.md` — Visual Mermaid diagrams, tech-stack rationale, subsystem mechanics, and extension recipes.
+  - `docs/DECISIONS_AND_TRAPS.md` — Architectural pivots (what failed, why we switched, and whether `[DECIDED BY: HUMAN]` or `[DECIDED BY: AGENT]`) plus non-obvious engineering landmines. Never log trivial syntax/type fixes or routine setup steps.
+  - `docs/VISUAL_GUIDE.html` — Self-contained interactive browser dashboard rendering project intentions, Mermaid-equivalent diagrams, decisions, and landmines visually.
 
-| Tool                 | Description                                   |
-| -------------------- | --------------------------------------------- |
-| `brainstorm`         | Breadth-first idea exploration with rationale |
-| `web_search`         | Web search with citations                     |
-| `paper_search`       | arXiv preprint search                         |
-| `zotero_search`      | Search a configured Zotero library            |
-| `reason`             | Dedicated deep-reasoning LLM call             |
-| `geogebra_analysis`  | Analyze math images into GeoGebra commands    |
-| `imagegen`           | Generate images                               |
-| `videogen`           | Generate videos                               |
+## 4. Latest-State Sync, GitHub (`Mostakim2005`), Builds & Licensing
 
-`USER_TOGGLEABLE_TOOL_NAMES` in `deeptutor/tools/builtin/__init__.py` is the
-authoritative toggle list. Other built-ins are **context-gated** or
-capability-owned: `CONFIGURABLE_BUILTIN_TOOL_NAMES` declares the context-gated
-surface, while `deeptutor/agents/_shared/tool_composition.py` owns the mount
-rules (`ToolMountFlags`) and the always-available workspace tools. Examples
-include `rag`, memory and notebook tools, `read_skill`, deferred MCP/CLI tools,
-`exec`, `ask_user`, and mastery navigation. `--tool` selects from the
-user-toggleable whitelist; it does not bypass context or capability gates.
+- **Latest-State Verification (Local PC vs. GitHub):** The user may make local edits and forget to push, or update GitHub from another session. Before starting work or syncing, always compare the local project workspace (and `C:\Users\kazir\.agent-templates\`) against `https://github.com/Mostakim2005`, treat whichever has the newest changes as the active truth, and reconcile them without overwriting newer local work.
+- **This Project's Remotes:** `origin` is the personal fork `https://github.com/Mostakim2005/DeepTutor`; `upstream` is `https://github.com/HKUDS/DeepTutor`. Never push to `upstream`. Sync official releases by merging an upstream tag on a `sync/vX.Y.Z` branch, then fast-forward `main` and push to `origin`.
+- **Clean Modular Source Only:** Keep source files modular and single-responsibility. Enforce strict `.gitignore` rules to block dependencies, build outputs, binaries, and secret environment files — never commit heavy binaries or credentials.
+- **Tag-Triggered Cloud Builds:** Package desktop builds as **portable artifacts by default** unless an installer is explicitly requested. Use GitHub Actions workflows triggered by version tags to compile and attach releases in the cloud rather than storing builds locally.
+- **Licensing & Third-Party Attribution (Project-Specific Exception):** DeepTutor is a fork of Apache-2.0 upstream code, so `LICENSE` **must remain Apache-2.0**; a fork cannot relicense it as PolyForm Noncommercial. Preserve upstream credits in `THIRD_PARTY_NOTICES.md` and keep the upstream citation in `CITATION.cff`. This is the one deliberate exception to the default PolyForm rule.
+- **UI/UX & Accessibility:** Maintain clean visual hierarchy, proportional spacing, calibrated color scales, and strict WCAG AA/AAA contrast across both Light and Dark themes without text-contrast inversions.
 
-### Level 2 — Capabilities
+## 5. Mandatory Post-Change Protocol
 
-Multi-stage pipelines that own the turn:
+After completing any feature, architectural change, or significant fix:
 
-| Capability       | Stages                                                |
-| ---------------- | ----------------------------------------------------- |
-| `chat`           | exploring → responding (single agentic loop, default) |
-| `ask_questions`  | responding (chat loop forced through `ask_user`)      |
-| `deep_solve`     | responding (chat loop + solve planning tools)         |
-| `deep_question`  | ideation → generation                                 |
-| `deep_research`  | rephrasing → decomposing → researching → reporting    |
-| `visualize`      | analyzing → generating → reviewing (SVG / Chart.js / Mermaid / HTML; or routes to Manim sub-stages via `render_type`) |
-| `math_animator`  | concept_analysis → concept_design → code_generation → code_retry → summary → render_output |
-| `mastery_path`   | responding (Guided Learning — chat loop + mastery tools, gated per topic type) |
-| `immersive_reading` | responding (document- or timestamp-grounded media reading loop) |
-| `video_lesson`   | code_generation → render_check → render_output (Remotion lesson played live in the browser, with TTS narration) |
+1. **Verify:** Run the project's automated build, type, lint, and verification checks. At minimum: `.venv/Scripts/python.exe -m compileall -q deeptutor deeptutor_cli` and `cd web && npm run typecheck`.
+2. **Sync Docs:** Update `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS_AND_TRAPS.md`, and `docs/VISUAL_GUIDE.html` whenever intent, architecture, or traps change.
+3. **Commit & Push:** Commit clean source and documentation changes, then push to `origin` (`https://github.com/Mostakim2005/DeepTutor`). Never push to `upstream`.
+4. **Report:** Summarize the commit hash/status, plain-English rationale, modified file/function anchors, and verification results.
 
-All capabilities converge on `emit_capability_result()` in
-`deeptutor/agents/_shared/capability_result.py` so every turn emits the same envelope
-(response payload + `cost_summary` from `UsageTracker`). Status copy and
-prompts are i18n'd via `capabilities/prompts/{en,zh}/<name>.yaml`.
+## 6. Live Preference Capture & Master Sync Protocol
 
-## CLI Usage
+- **Auto-Capture:** Whenever the user states a new recurring workflow rule, preference, or design constraint, append it to **Section 7** below as:
+  `- [PREF: Descriptive-Slug | YYYY-MM-DD | Category] Plain-English rule.`
+- **Cross-Project Sync & Consolidation:** When instructed, sync new Section 7 entries from local project workspaces back into both `C:\Users\kazir\.agent-templates\AGENTS.md` and the master `.agent-templates` repository on `https://github.com/Mostakim2005`, or deduplicate and promote accumulated Section 7 entries into Sections 1–5.
 
-```bash
-# Install from the current dev source checkout
-python -m pip install -r requirements/full.txt
-python -m pip install -e . --no-deps
+## 7. Live User Preferences (Auto-Captured)
 
-# Alternative in 1.7.0: choose one in a separate wheel environment
-python -m pip install "deeptutor[full]"  # Full app, CLI + Web/API
-python -m pip install deeptutor         # Core CLI/SDK (chat + ask_questions)
-python -m pip install deeptutor-cli     # Compatibility alias for core
+*(All preferences up to 2026-11-06 have been consolidated into Sections 1–6. Append newly discovered preferences below.)*
 
-# Run any capability
-deeptutor run chat "Explain Fourier transform"
-deeptutor run deep_solve "Solve x^2=4" --kb my-kb
-deeptutor run visualize "Animate sine wave" --config render_mode=manim_video
+---
 
-# Interactive REPL
-deeptutor chat
-# (inside the REPL: /regenerate or /retry re-runs the last user message)
+# Project Context: DeepTutor (v1.7.2)
 
-# Partners (IM-connected companions)
-deeptutor partner list
+> **1-Line Summary:** Agent-native tutoring app where CLI, WebSocket, and SDK requests share one durable turn service; this fork adds a browser export engine, extra subagent backends, model pinning, and Windows fixes.
 
-# Knowledge bases, memory, server
-deeptutor kb list
-deeptutor kb create my-kb --doc textbook.pdf
-deeptutor memory show
-deeptutor serve --port 8001       # API server only
-deeptutor start                   # backend + frontend together
-```
+## Architecture in One Paragraph
 
-Examples beyond core require their owning modules; use `deeptutor module list`
-to inspect installed/enabled/ready states and `deeptutor plugin list` to discover
-registered capabilities and tools. Source Web startup also needs Node.js 22 LTS
-and `npm ci --legacy-peer-deps` in `web/`. CLI-only source users can skip frontend
-setup, but still need the full Python dependencies. Follow
-[Agent Setup](docs-for-dev/AGENT_SETUP.md) for credentials and verification.
+Entry points (`deeptutor_cli/main.py`, `deeptutor/api/routers/unified_ws.py`, `deeptutor/app/`) submit to `TurnApplicationService` in `deeptutor/app/service.py`. It persists the turn, then `TurnEngine` routes a `UnifiedContext` through `ChatOrchestrator` to one capability in `deeptutor/capabilities/`. Capabilities mount authorized tools from `deeptutor/runtime/registry/`, emit events on a per-turn `StreamBus`, and return through `emit_capability_result`. Runtime settings live in `data/user/settings/`; project-root `.env` files are intentionally ignored.
 
-## Key Files
+## Two Plugin Layers
 
-| Path                                       | Purpose                              |
-| ------------------------------------------ | ------------------------------------ |
-| `deeptutor/runtime/orchestrator.py`        | `ChatOrchestrator` — unified entry   |
-| `deeptutor/runtime/launcher.py`            | Backend + frontend lifecycle / port discovery |
-| `deeptutor/runtime/registry/`              | Tool + Capability registries         |
-| `deeptutor/runtime/bootstrap/builtin_capabilities.py` | Built-in capability class paths |
-| `deeptutor/services/config/runtime_settings.py` | JSON settings + process-env overrides |
-| `deeptutor/services/subagent/`             | Local/remote agent connectors; register each backend in `registry.py` and its model options in `models.py` (Grok CLI uses native `streaming-json`) |
-| `deeptutor/core/stream.py`, `deeptutor/runtime/stream_bus.py` | StreamEvent protocol + async fan-out |
-| `deeptutor/core/tool_protocol.py`          | `BaseTool` + `ToolDefinition`         |
-| `deeptutor/core/capability_protocol.py`    | `TurnCapability` + `CapabilityManifest` |
-| `deeptutor/core/context.py`                | `UnifiedContext` dataclass            |
-| `deeptutor/tools/builtin/__init__.py`      | All built-in tool wrappers           |
-| `deeptutor/capabilities/`                  | Built-in capability implementations  |
-| `deeptutor/app/`                           | `DeepTutorApp` SDK facade + durable application service |
-| `deeptutor_cli/main.py`                    | Typer CLI entry point                |
-| `deeptutor/api/routers/unified_ws.py`      | Unified WebSocket endpoint           |
-| `apps/desktop/`                            | Open DeepTutor desktop apps for MacOS and Windows (Electron shell + bundled core; per-target builds in `platforms/`) |
+- **Tools (Level 1):** single operations the model selects. `USER_TOGGLEABLE_TOOL_NAMES` in `deeptutor/tools/builtin/__init__.py` is the authoritative toggle list. Context-gated tools are declared by `CONFIGURABLE_BUILTIN_TOOL_NAMES` and mounted through `ToolMountFlags` in `deeptutor/agents/_shared/tool_composition.py`.
+- **Capabilities (Level 2):** turn-owning pipelines: `chat`, `ask_questions`, `deep_solve`, `deep_question`, `deep_research`, `visualize`, `math_animator`, `mastery_path`, `immersive_reading`, `video_lesson`.
 
-## Dependency Layers
+## Local Customizations (Do Not Regress)
 
-The 1.7.0 layout is modular; 1.6.15 and earlier packages use the
-previous layout. Core owns the CLI, SDK and shared runtime; feature wheels must
-match its version. `deeptutor-cli` is a metadata-only compatibility alias.
-For development, use source or [local wheels](docs-for-dev/MODULES.md).
+| Area | Where | Why it exists |
+| --- | --- | --- |
+| Export engine | `web/lib/export/`, `web/features/export/ExportChatModal.tsx` | Seven formats with element toggles, OMML equations, vector PDF, and update resilience. |
+| KaTeX hardening | `web/lib/latex-normalize.ts` | Stops cascading parse failures on matrices and multi-line equations. |
+| Model preferences | `data/user/settings/model_preferences.json`, `deeptutor/services/subagent/model_preferences.py`, `deeptutor/api/routers/settings.py` | Friendly names, star pinning, hidden-model drawer. |
+| Subagents | `deeptutor/services/subagent/` | Command Code, OpenCode, Antigravity, DeepSeek Harness, and per-connection model/effort overrides. |
+| Windows launcher | `deeptutor/runtime/launcher.py` | Detached start without console leaks; `CREATE_NO_WINDOW` fallback. |
+| CLI apps | `deeptutor/services/cli_apps/` | uv/venv install parity, per-app environments, Windows `.cmd` resolution. |
+| Workspaces & skills | `deeptutor/services/workspace/`, `data/user/workspaces/*/skills/` | STEM & Engineering and Polymath & Cognitive, Zettelkasten/LightRAG, Feynman persona. |
 
-Module manifests own dependency groups; generated requirements files support
-source, Docker and CI installs. `pyproject.toml` stores extra templates under
-`tool.deeptutor.optional-dependencies`; `build_metadata.py` resolves same-version
-wheel pins. Source checkouts expose all modules and install external dependencies
-through `requirements/full.txt`, followed by `pip install -e . --no-deps`.
-Use the source helper for optional extras rather than installing feature wheels
-over the checkout:
+## Verification
 
-```bash
-python scripts/install_extras.py partners       # Partner channel SDKs
-python scripts/install_extras.py matrix         # Matrix channel without E2EE/libolm
-python scripts/install_extras.py matrix-e2e     # Matrix with end-to-end encryption
-python scripts/install_extras.py math-animator  # Manim; also needs system LaTeX/ffmpeg
-python scripts/install_extras.py dev            # Test / lint tooling
-python scripts/install_extras.py all            # Full + Manim + dev dependencies
-```
+- Python syntax: `.venv/Scripts/python.exe -m compileall -q deeptutor deeptutor_cli`
+- Frontend types: `cd web && npm run typecheck`
+- Frontend full gate: `cd web && npm run check:fast`
+- Python tests: `.venv/Scripts/python.exe -m pytest -q` (requires `dev` extras; not installed in this checkout)
+- Lint: `ruff check .` and `ruff format --check .` (requires `dev` extras)
 
-Stop DeepTutor before module changes. Source supports `module enable/disable`;
-wheel environments also support `module install/uninstall`. Upgrading a legacy
-`deeptutor-cli` installation requires uninstalling it before installing the new
-packages, preserving the same `DEEPTUTOR_HOME`; see the setup guide. Validate
-with `python -m pip check`, `deeptutor module list`, and the setup readiness checks.
+## Non-Obvious Rules
 
-## Desktop Release Requirement
-
-Starting with the release after v1.7.1, publish the Intel Mac (`macos-x64`)
-DMG together with the Apple Silicon (`macos-arm64`) DMG and Windows installer
-and portable ZIP for every version. Wait for the Desktop Release workflow,
-including `verify-release`, and verify the downloads on the actual GitHub
-Release before reporting completion. If any platform fails, fix and rerun it;
-do not silently omit Intel Mac or treat a partial desktop release as complete.
-See `apps/desktop/README.md` for the build and publication flow.
+1. Never resolve a merge by taking upstream wholesale in `web/lib/export/`, `deeptutor/services/subagent/`, or the model-preference routes.
+2. `interpreter_path()` and `bin_dir()` must share `_env_bin_dir()`; never inline a venv path again.
+3. Windows npm shims live at the prefix root with `.cmd`/`.bat`, not under `bin/`.
+4. Never add `.env` loading as a configuration source.
+5. Keep `wrapBareEnvironments` idempotent.
+6. Keep `LICENSE` as Apache-2.0.

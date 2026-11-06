@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepTutor — Visual Guide</title>
+<style>
+  :root {
+    --bg: #f7f8fb;
+    --surface: #ffffff;
+    --surface-2: #eef2f9;
+    --ink: #101828;
+    --muted: #475467;
+    --line: #d0d5dd;
+    --accent: #1d4ed8;
+    --accent-soft: #dbe7ff;
+    --good: #067647;
+    --good-soft: #d1fadf;
+    --warn: #b42318;
+    --warn-soft: #fee4e2;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .06);
+    --radius: 14px;
+  }
+  [data-theme="dark"] {
+    --bg: #0b1220;
+    --surface: #111a2b;
+    --surface-2: #17233a;
+    --ink: #f2f4f7;
+    --muted: #b8c4d6;
+    --line: #2c3a52;
+    --accent: #84adff;
+    --accent-soft: #1b2f55;
+    --good: #75e0a7;
+    --good-soft: #123527;
+    --warn: #ffb4ab;
+    --warn-soft: #3b1a17;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.55 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  a { color: var(--accent); }
+  .shell { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
+  aside {
+    position: sticky; top: 0; align-self: start; height: 100vh;
+    padding: 26px 20px; border-right: 1px solid var(--line);
+    background: var(--surface); display: flex; flex-direction: column; gap: 18px;
+  }
+  .brand { display: flex; gap: 12px; align-items: center; }
+  .mark {
+    width: 38px; height: 38px; border-radius: 11px; flex: none;
+    background: linear-gradient(140deg, var(--accent), #7c3aed);
+    display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 18px;
+  }
+  .brand h1 { font-size: 16px; margin: 0; letter-spacing: .1px; }
+  .brand p { margin: 1px 0 0; font-size: 12px; color: var(--muted); }
+  nav { display: flex; flex-direction: column; gap: 3px; }
+  nav a {
+    text-decoration: none; color: var(--muted); font-size: 14px;
+    padding: 8px 10px; border-radius: 8px;
+  }
+  nav a:hover, nav a.active { background: var(--accent-soft); color: var(--accent); }
+  .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+  .side-foot p { margin: 0; font-size: 12px; color: var(--muted); }
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--line);
+    background: var(--surface-2); color: var(--ink);
+    border-radius: 9px; padding: 8px 11px;
+  }
+  button:hover { border-color: var(--accent); }
+  main { padding: 38px clamp(20px, 4vw, 54px) 70px; max-width: 1180px; width: 100%; }
+  .hero {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 30px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: auto -60px -90px auto;
+    width: 260px; height: 260px; border-radius: 50%;
+    background: radial-gradient(circle, var(--accent-soft), transparent 70%);
+  }
+  .eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 8px;
+  }
+  .hero h2 { margin: 0 0 10px; font-size: clamp(26px, 3vw, 38px); line-height: 1.15; }
+  .hero p { margin: 0; max-width: 72ch; color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; }
+  .stat { background: var(--surface-2); border-radius: 11px; padding: 13px 14px; }
+  .stat b { display: block; font-size: 24px; line-height: 1.2; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  section { margin-top: 42px; scroll-margin-top: 18px; }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+  .section-head h3 { margin: 0; font-size: 22px; }
+  .section-head span { font-size: 12px; color: var(--muted); }
+  .lede { margin: 0 0 18px; color: var(--muted); max-width: 78ch; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 17px 18px; box-shadow: var(--shadow);
+  }
+  .card h4 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+  .tag {
+    font-size: 11px; padding: 3px 8px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 600;
+  }
+  .tag.good { background: var(--good-soft); color: var(--good); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .diagram {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px; overflow-x: auto;
+  }
+  .diagram svg { min-width: 720px; width: 100%; height: auto; display: block; }
+  .svg-box { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; }
+  .svg-box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; }
+  .svg-box-good { fill: var(--good-soft); stroke: var(--good); stroke-width: 1.2; }
+  .svg-label { fill: var(--ink); font: 600 12px "Segoe UI", system-ui, sans-serif; }
+  .svg-sub { fill: var(--muted); font: 11px "Segoe UI", system-ui, sans-serif; }
+  .svg-line { stroke: var(--muted); stroke-width: 1.3; fill: none; marker-end: url(#arrow); }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  input[type="search"] {
+    flex: 1 1 260px; min-width: 200px; font: inherit; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 9px; padding: 9px 12px;
+  }
+  input[type="search"]:focus, button:focus-visible, nav a:focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 2px;
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 14px; }
+  .table-wrap { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--surface-2); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  .trap {
+    border-left: 4px solid var(--warn); background: var(--surface);
+    border-radius: 0 var(--radius) var(--radius) 0; padding: 15px 18px; margin-bottom: 12px;
+    border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .trap h4 { margin: 0 0 5px; font-size: 15px; }
+  .trap p { margin: 0; color: var(--muted); font-size: 14px; }
+  .trap code, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12.5px; }
+  .decision {
+    display: grid; grid-template-columns: 44px minmax(0,1fr); gap: 14px;
+    padding: 15px 0; border-bottom: 1px solid var(--line);
+  }
+  .decision:last-child { border-bottom: 0; }
+  .num {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px;
+  }
+  .decision h4 { margin: 0 0 4px; font-size: 15px; }
+  .decision p { margin: 0; color: var(--muted); font-size: 14px; }
+  .empty { display: none; padding: 20px; color: var(--muted); font-size: 14px; }
+  footer { margin-top: 50px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    nav { flex-direction: row; overflow-x: auto; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .grid { grid-template-columns: 1fr; }
+  }
+  @media print {
+    aside, .toolbar, footer { display: none; }
+    .shell { display: block; }
+    body { background: #fff; }
+    .card, .hero, .diagram, .table-wrap { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand">
+      <div class="mark" aria-hidden="true">D</div>
+      <div>
+        <h1>DeepTutor</h1>
+        <p>Personal fork · v1.7.2</p>
+      </div>
+    </div>
+    <nav aria-label="Sections">
+      <a href="#intent" class="active">Intent</a>
+      <a href="#features">Features</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#decisions">Decisions</a>
+      <a href="#traps">Landmines</a>
+      <a href="#health">Health checks</a>
+    </nav>
+    <div class="side-foot">
+      <button id="theme" type="button" aria-label="Toggle color theme">Dark mode</button>
+      <p>Generated from <span class="mono">docs/*.md</span>. Source of truth stays in Markdown.</p>
+    </div>
+  </aside>
+
+  <main>
+    <div class="hero">
+      <p class="eyebrow">Product intent · architecture · landmines</p>
+      <h2>A lifelong tutor that survives every update.</h2>
+      <p>DeepTutor routes CLI, WebSocket, and SDK requests through one durable turn service, then hands the turn to a capability that can teach, solve, research, read, or build. This fork adds a publication-grade export engine, extra subagent backends, model pinning, and Windows runtime fixes — all preserved through the v1.7.2 merge.</p>
+      <div class="stats">
+        <div class="stat"><b>10</b><span>turn capabilities</span></div>
+        <div class="stat"><b>7</b><span>export formats</span></div>
+        <div class="stat"><b>19</b><span>local commits kept</span></div>
+        <div class="stat"><b>3</b><span>merge collisions resolved</span></div>
+      </div>
+    </div>
+
+    <section id="intent">
+      <div class="section-head"><h3>Intent</h3><span>PRODUCT.md</span></div>
+      <p class="lede">What the app must do and how it must feel, independent of implementation.</p>
+      <div class="grid">
+        <div class="card">
+          <h4>Durable by default</h4>
+          <p>A reply must not vanish because a tab closed. Reconnecting resumes the same turn instead of paying for a second model call.</p>
+          <div class="tags"><span class="tag">replay</span><span class="tag">sessions</span><span class="tag">recovery</span></div>
+        </div>
+        <div class="card">
+          <h4>Local customization wins</h4>
+          <p>Upstream features are welcome; local export, subagents, and preferences are never sacrificed to obtain them.</p>
+          <div class="tags"><span class="tag good">non-negotiable</span><span class="tag">fork</span></div>
+        </div>
+        <div class="card">
+          <h4>Readable everywhere</h4>
+          <p>Light and dark themes keep WCAG contrast and a clear hierarchy. No text inversions, no low-contrast status colors.</p>
+          <div class="tags"><span class="tag">WCAG AA</span><span class="tag">themes</span></div>
+        </div>
+        <div class="card">
+          <h4>Offline-capable artifacts</h4>
+          <p>Export runs entirely in the browser, so documents, equations, and tables do not depend on a server or an API key.</p>
+          <div class="tags"><span class="tag">export</span><span class="tag">no server</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="section-head"><h3>Active features</h3><span id="feature-count">Do not break</span></div>
+      <p class="lede">Each card is a promise to the learner. Filter by name, alias, or subsystem.</p>
+      <div class="toolbar">
+        <input id="filter" type="search" placeholder="Filter features and subsystems…" aria-label="Filter features">
+        <button id="clear" type="button">Clear</button>
+      </div>
+      <div class="grid" id="feature-grid">
+        <div class="card" data-search="turn pipeline durable replay session recovery stream">
+          <h4>Durable turn pipeline</h4>
+          <p>Admission, execution, persistence, and replay live in one application service shared by all three entry points.</p>
+          <div class="tags"><span class="tag">service</span><span class="tag">stream bus</span></div>
+        </div>
+        <div class="card" data-search="capability chat solve research visualize mastery reading video lesson">
+          <h4>Capability suite</h4>
+          <p>Ten turn-owning pipelines, from conversation and questioning to mastery paths and narrated video lessons.</p>
+          <div class="tags"><span class="tag">10 capabilities</span><span class="tag">stages</span></div>
+        </div>
+        <div class="card" data-search="tool registry web search paper reason brainstorm imagegen videogen">
+          <h4>Tool registry</h4>
+          <p>Eight learner-toggleable tools, plus context-gated workspace tools that only mount when authorized.</p>
+          <div class="tags"><span class="tag">toggles</span><span class="tag">mount flags</span></div>
+        </div>
+        <div class="card" data-search="export docx xlsx pdf html markdown json text download">
+          <h4>Export engine</h4>
+          <p>Word with native equations, real Excel sheets, standalone HTML, vector PDF, Markdown, JSON, and text.</p>
+          <div class="tags"><span class="tag good">7 formats</span><span class="tag">element toggles</span></div>
+        </div>
+        <div class="card" data-search="latex katex matrix formula publication print pdf pagination">
+          <h4>Publication PDF &amp; LaTeX hardening</h4>
+          <p>Paged, searchable vector PDF output and an idempotent normalizer that stops cascading KaTeX failures.</p>
+          <div class="tags"><span class="tag">OMML</span><span class="tag">print</span></div>
+        </div>
+        <div class="card" data-search="model preferences pin star hide eye friendly name picker">
+          <h4>Model pinning &amp; hiding</h4>
+          <p>Friendly names, glowing favorites, and a hidden drawer, all stored in a human-editable JSON file.</p>
+          <div class="tags"><span class="tag">JSON</span><span class="tag">REST</span></div>
+        </div>
+        <div class="card" data-search="subagent command code opencode antigravity deepseek harness codex claude kimi grok">
+          <h4>Subagent backends</h4>
+          <p>External coding agents run with per-connection model and reasoning-effort overrides that reach the backend intact.</p>
+          <div class="tags"><span class="tag">handoff</span><span class="tag">effort</span></div>
+        </div>
+        <div class="card" data-search="windows launcher detached worker console create_no_window">
+          <h4>Windows detached launcher</h4>
+          <p>Starts backend and frontend without a console flash, with a safe fallback for stripped Python builds.</p>
+          <div class="tags"><span class="tag">creation flags</span><span class="tag">logs</span></div>
+        </div>
+        <div class="card" data-search="cli apps blender calibre chromadb uv venv npm prefix">
+          <h4>CLI apps runtime</h4>
+          <p>One isolated environment per app, shared interpreter-path math, and correct Windows <span class="mono">.cmd</span> resolution.</p>
+          <div class="tags"><span class="tag">uv fast path</span><span class="tag">venv</span></div>
+        </div>
+        <div class="card" data-search="workspace stem engineering polymath zettelkasten lightrag obsidian skills feynman">
+          <h4>Dual workspaces &amp; skills</h4>
+          <p>STEM and Polymath environments share settings and an Obsidian vault, with local LightRAG retrieval and imported learning skills.</p>
+          <div class="tags"><span class="tag">workspaces</span><span class="tag">skills</span></div>
+        </div>
+      </div>
+      <p class="empty" id="empty">No feature matches that filter.</p>
+    </section>
+
+    <section id="architecture">
+      <div class="section-head"><h3>Architecture</h3><span>ARCHITECTURE.md</span></div>
+      <p class="lede">Entry points converge before execution. Capabilities own turns; tools are selected inside them.</p>
+      <div class="diagram">
+        <svg viewBox="0 0 980 430" role="img" aria-label="DeepTutor architecture: CLI, WebSocket, and SDK feed a durable application service, which drives the turn engine and a selected capability with authorized tools and a stream bus.">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor" style="color: var(--muted)"></path>
+            </marker>
+          </defs>
+
+          <text x="20" y="26" class="svg-sub">ENTRY POINTS</text>
+          <rect x="20" y="40" width="150" height="58" rx="10" class="svg-box"></rect>
+          <text x="95" y="65" text-anchor="middle" class="svg-label">Typer CLI</text>
+          <text x="95" y="83" text-anchor="middle" class="svg-sub">commands</text>
+
+          <rect x="20" y="112" width="150" height="58" rx="10" class="svg-box"></rect>
+          <text x="95" y="137" text-anchor="middle" class="svg-label">WebSocket</text>
+          <text x="95" y="155" text-anchor="middle" class="svg-sub">/ws turns</text>
+
+          <rect x="20" y="184" width="150" height="58" rx="10" class="svg-box"></rect>
+          <text x="95" y="209" text-anchor="middle" class="svg-label">Python SDK</text>
+          <text x="95" y="227" text-anchor="middle" class="svg-sub">DeepTutorApp</text>
+
+          <text x="255" y="26" class="svg-sub">DURABLE APPLICATION</text>
+          <rect x="235" y="86" width="200" height="120" rx="12" class="svg-box-accent"></rect>
+          <text x="335" y="122" text-anchor="middle" class="svg-label">TurnApplicationService</text>
+          <text x="335" y="142" text-anchor="middle" class="svg-sub">admit · persist · replay</text>
+          <text x="335" y="160" text-anchor="middle" class="svg-sub">cancel · recover</text>
+
+          <rect x="235" y="228" width="200" height="62" rx="12" class="svg-box"></rect>
+          <text x="335" y="254" text-anchor="middle" class="svg-label">Session store</text>
+          <text x="335" y="272" text-anchor="middle" class="svg-sub">events + coordinator</text>
+
+          <text x="520" y="26" class="svg-sub">TURN ENGINE</text>
+          <rect x="505" y="86" width="170" height="58" rx="10" class="svg-box"></rect>
+          <text x="590" y="111" text-anchor="middle" class="svg-label">TurnEngine</text>
+          <text x="590" y="129" text-anchor="middle" class="svg-sub">routing</text>
+
+          <rect x="505" y="164" width="170" height="58" rx="10" class="svg-box"></rect>
+          <text x="590" y="189" text-anchor="middle" class="svg-label">ChatOrchestrator</text>
+          <text x="590" y="207" text-anchor="middle" class="svg-sub">capability selection</text>
+
+          <text x="745" y="26" class="svg-sub">PLUGIN LAYER</text>
+          <rect x="735" y="86" width="215" height="62" rx="10" class="svg-box-good"></rect>
+          <text x="842" y="112" text-anchor="middle" class="svg-label">CapabilityRegistry</text>
+          <text x="842" y="130" text-anchor="middle" class="svg-sub">10 turn-owning pipelines</text>
+
+          <rect x="735" y="168" width="215" height="62" rx="10" class="svg-box"></rect>
+          <text x="842" y="194" text-anchor="middle" class="svg-label">ToolRegistry</text>
+          <text x="842" y="212" text-anchor="middle" class="svg-sub">authorized tools only</text>
+
+          <rect x="505" y="250" width="170" height="62" rx="10" class="svg-box"></rect>
+          <text x="590" y="276" text-anchor="middle" class="svg-label">StreamBus</text>
+          <text x="590" y="294" text-anchor="middle" class="svg-sub">per-turn fan-out</text>
+
+          <rect x="735" y="250" width="215" height="62" rx="10" class="svg-box"></rect>
+          <text x="842" y="276" text-anchor="middle" class="svg-label">Subagents · RAG · CLI apps</text>
+          <text x="842" y="294" text-anchor="middle" class="svg-sub">feature services</text>
+
+          <path d="M170 69 H235 V116" class="svg-line"></path>
+          <path d="M170 141 H210 V140 H235" class="svg-line"></path>
+          <path d="M170 213 H210 V170 H235" class="svg-line"></path>
+          <path d="M335 206 V228" class="svg-line"></path>
+          <path d="M435 146 H505 V115" class="svg-line"></path>
+          <path d="M590 144 V164" class="svg-line"></path>
+          <path d="M675 193 H735 V117" class="svg-line"></path>
+          <path d="M675 193 H705 V199 H735" class="svg-line"></path>
+          <path d="M842 148 V168" class="svg-line"></path>
+          <path d="M735 199 H700 V220" class="svg-line"></path>
+          <path d="M842 230 V250" class="svg-line"></path>
+          <path d="M675 281 H735" class="svg-line"></path>
+          <path d="M590 250 V250 H505 V200" class="svg-line"></path>
+
+          <text x="20" y="330" class="svg-sub">THE INVARIANT</text>
+          <rect x="20" y="344" width="930" height="58" rx="12" class="svg-box-accent"></rect>
+          <text x="485" y="369" text-anchor="middle" class="svg-label">Entry points never instantiate an orchestrator directly.</text>
+          <text x="485" y="388" text-anchor="middle" class="svg-sub">Persistence, replay, cancellation, and recovery belong to the shared application/runtime path.</text>
+        </svg>
+      </div>
+    </section>
+
+    <section id="decisions">
+      <div class="section-head"><h3>Decisions</h3><span>why, not just what</span></div>
+      <p class="lede">Each entry records the rejected option, because the rejection is what future work must not undo.</p>
+      <div class="card">
+        <div class="decision">
+          <div class="num">1</div>
+          <div><h4>Merge upstream, never rebase it</h4><p>19 local commits stay intact; each release lands on a sync branch and records which side won every collision.</p></div>
+        </div>
+        <div class="decision">
+          <div class="num">2</div>
+          <div><h4>Export in the browser</h4><p>Rejected a server-side document service: it added Python dependencies and broke whenever upstream moved the API.</p></div>
+        </div>
+        <div class="decision">
+          <div class="num">3</div>
+          <div><h4>Preferences in user-owned JSON</h4><p>A generated catalog gets overwritten by updates; <span class="mono">model_preferences.json</span> survives and stays inspectable.</p></div>
+        </div>
+        <div class="decision">
+          <div class="num">4</div>
+          <div><h4>One interpreter path</h4><p>The installer and runtime share <span class="mono">_env_bin_dir</span>, so pip and the entry point can never disagree.</p></div>
+        </div>
+        <div class="decision">
+          <div class="num">5</div>
+          <div><h4>Apache-2.0 stays</h4><p>PolyForm cannot be applied to a derivative of Apache-2.0 code. This is a documented exception to the protocol default.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="traps">
+      <div class="section-head"><h3>Landmines</h3><span>do not "clean up"</span></div>
+      <p class="lede">These look redundant until the exact platform or update that needs them arrives.</p>
+      <div class="trap">
+        <h4>Taking upstream wholesale in custom subsystems</h4>
+        <p>Never resolve <span class="mono">web/lib/export/</span> or <span class="mono">deeptutor/services/subagent/</span> with <span class="mono">--theirs</span>. Upstream does not know these features exist.</p>
+      </div>
+      <div class="trap">
+        <h4>Windows npm shims at the prefix root</h4>
+        <p>Windows npm writes <span class="mono">.cmd</span> at the prefix root, not <span class="mono">bin/</span>. Removing the special case makes every CLI app look missing.</p>
+      </div>
+      <div class="trap">
+        <h4>Duplicated interpreter-path math</h4>
+        <p>An inline path expression drifts from <span class="mono">bin_dir</span>; installation succeeds and execution fails later, on the learner's machine.</p>
+      </div>
+      <div class="trap">
+        <h4>Treating <span class="mono">.env</span> as configuration</h4>
+        <p>Runtime settings live in <span class="mono">data/user/settings/</span>. A feature that reads <span class="mono">.env</span> works locally and fails in every packaged install.</p>
+      </div>
+      <div class="trap">
+        <h4>Re-wrapping normalized LaTeX</h4>
+        <p>Wrapping an already-wrapped matrix breaks the whole message's rendering. The normalizer must stay idempotent.</p>
+      </div>
+      <div class="trap">
+        <h4>Assuming <span class="mono">CREATE_NO_WINDOW</span> exists</h4>
+        <p>Stripped Python builds lack the constant. Keep the <span class="mono">getattr</span> fallback or the app fails to launch with a traceback.</p>
+      </div>
+    </section>
+
+    <section id="health">
+      <div class="section-head"><h3>Health checks</h3><span>run before committing</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Check</th><th>Command</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Python syntax</td><td class="mono">.venv/Scripts/python.exe -m compileall -q deeptutor deeptutor_cli</td><td><span class="tag good">passes</span></td></tr>
+            <tr><td>Frontend types</td><td class="mono">cd web &amp;&amp; npm run typecheck</td><td><span class="tag good">passes</span></td></tr>
+            <tr><td>Frontend gate</td><td class="mono">cd web &amp;&amp; npm run check:fast</td><td><span class="tag">available</span></td></tr>
+            <tr><td>Python tests</td><td class="mono">.venv/Scripts/python.exe -m pytest -q</td><td><span class="tag warn">dev extras not installed</span></td></tr>
+            <tr><td>Lint / format</td><td class="mono">ruff check . &amp;&amp; ruff format --check .</td><td><span class="tag warn">dev extras not installed</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      DeepTutor personal fork · upstream <span class="mono">HKUDS/DeepTutor</span> · merged tag <span class="mono">v1.7.2</span> · documentation generated 2026-11-06.
+      Markdown in <span class="mono">docs/</span> is authoritative; this dashboard is a view.
+    </footer>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggle = document.getElementById("theme");
+    var stored = null;
+    try { stored = localStorage.getItem("deeptutor-theme"); } catch (e) {}
+    if (stored === "dark") { root.setAttribute("data-theme", "dark"); toggle.textContent = "Light mode"; }
+    toggle.addEventListener("click", function () {
+      var dark = root.getAttribute("data-theme") === "dark";
+      root.setAttribute("data-theme", dark ? "light" : "dark");
+      toggle.textContent = dark ? "Dark mode" : "Light mode";
+      try { localStorage.setItem("deeptutor-theme", dark ? "light" : "dark"); } catch (e) {}
+    });
+
+    var filter = document.getElementById("filter");
+    var grid = document.getElementById("feature-grid");
+    var cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
+    var empty = document.getElementById("empty");
+    var count = document.getElementById("feature-count");
+
+    function applyFilter() {
+      var q = filter.value.trim().toLowerCase();
+      var shown = 0;
+      cards.forEach(function (card) {
+        var hay = (card.textContent + " " + (card.getAttribute("data-search") || "")).toLowerCase();
+        var match = !q || hay.indexOf(q) !== -1;
+        card.style.display = match ? "" : "none";
+        if (match) shown++;
+      });
+      empty.style.display = shown ? "none" : "block";
+      count.textContent = q ? shown + " of " + cards.length + " features" : "Do not break";
+    }
+    filter.addEventListener("input", applyFilter);
+    document.getElementById("clear").addEventListener("click", function () {
+      filter.value = "";
+      applyFilter();
+      filter.focus();
+    });
+
+    var links = Array.prototype.slice.call(document.querySelectorAll("nav a"));
+    var sections = links.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+    function highlight() {
+      var pos = window.scrollY + 120;
+      var active = 0;
+      sections.forEach(function (s, i) { if (s && s.offsetTop <= pos) active = i; });
+      links.forEach(function (a, i) { a.classList.toggle("active", i === active); });
+    }
+    window.addEventListener("scroll", highlight, { passive: true });
+    highlight();
+  })();
+</script>
+</body>
+</html>
