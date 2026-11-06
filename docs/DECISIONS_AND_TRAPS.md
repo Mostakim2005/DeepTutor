@@ -105,6 +105,51 @@ flowchart LR
   * `deeptutor/services/cli_apps/paths.py` -> `_env_bin_dir`, `interpreter_path`, `bin_dir`
   * `deeptutor/services/cli_apps/installer.py` -> `_steps`
 
+### [DECISION: v1.7.2 Merge Kept Both Sides] | Aliases: merge record, launcher conflict, installer conflict, paths conflict, compatibility repairs
+> **1-Line Summary:** The v1.7.2 merge preserved local Windows behavior and adopted upstream's shared helpers; five custom UI patterns were then adapted to the release gates without changing user-visible behavior.
+* **Decision Maker:** `[DECIDED BY: AGENT — reviewed in the v1.7.2 merge]`
+* **Original User Intention:** Receive every v1.7.2 feature without losing the fork's launcher, CLI-app, export, subagent, preference, or workspace behavior.
+* **Collisions and Resolutions:**
+
+| File | Local behavior | Upstream change | Resolution |
+| --- | --- | --- | --- |
+| `deeptutor/runtime/launcher.py` | `getattr(subprocess, "CREATE_NO_WINDOW", ...)` so stripped Python builds still launch | Hidden-console launch plus `PYTHONSAFEPATH=1` to avoid stale source-tree imports | Kept the fallback and upstream's other launcher changes |
+| `deeptutor/services/cli_apps/installer.py` | `uv` fast path and a Windows venv redirector override | Shared `interpreter_path()` and rollback-backup preservation | Used `interpreter_path()` everywhere; kept the `uv` and redirector branches |
+| `deeptutor/services/cli_apps/paths.py` | Windows npm prefix-root `.cmd` / `.bat` probing | Shared `_env_bin_dir()` and deterministic interpreter naming | Adopted the shared helper; kept the Windows prefix-root and extension probing |
+
+* **Compatibility Repairs (No Behavior Change):**
+
+| Area | New gate | Repair |
+| --- | --- | --- |
+| Model preference toggles | No raw `fetch` outside the shared client | `requestVoid` in `AnswerModeMenu` |
+| Hover hints | Native `title` is not accessible enough | Shared `Tooltip` on pin/hide and print controls |
+| Prop-to-state sync | React forbids effect-based syncing | Derive the selected model during render |
+| API and turn contracts | Generated files must match source | Regenerated under `web/contracts/generated/` |
+| Locale keys | Every `t()` key must exist in strict locales | Added 48 export/model keys and `Export`; en/zh translated, others fall back to English |
+
+* **Visual Pivot Map (What Failed vs. What Works):**
+
+```mermaid
+flowchart LR
+    UP["v1.7.2 upstream"] --> MERGE["merge on sync branch"]
+    LOCAL["local Windows fixes"] --> MERGE
+    MERGE --> C1["3 file collisions"]
+    C1 --> BOTH["keep both behaviors"]
+    BOTH --> GATE["release gates"]
+    GATE --> REPAIR["5 compatibility repairs"]
+    REPAIR --> VERIFY["check:fast passes"]
+```
+
+* **Code Anchors (Grep Targets):**
+  * `deeptutor/runtime/launcher.py` -> `_launch_detached`, `_spawn`
+  * `deeptutor/services/cli_apps/installer.py` -> `_steps`
+  * `deeptutor/services/cli_apps/paths.py` -> `_env_bin_dir`, `interpreter_path`, `bin_dir`
+  * `web/components/chat/home/AnswerModeMenu.tsx` -> model preference toggles
+  * `web/shared/api/client.ts` -> `requestVoid`
+  * `web/shared/ui/Tooltip.tsx` -> `Tooltip`
+  * `web/scripts/generate-contracts.mjs` -> `--check`
+  * `web/scripts/i18n_parity.mjs` -> locale key parity
+
 ### [DECISION: Apache-2.0 License Stays] | Aliases: licensing, PolyForm, fork license, attribution
 > **1-Line Summary:** The fork keeps the upstream Apache-2.0 license because a fork cannot relicense Apache-2.0 code; this is a deliberate exception to the agent protocol's default PolyForm rule.
 * **Decision Maker:** `[DECIDED BY: AGENT — flagged to Human]`

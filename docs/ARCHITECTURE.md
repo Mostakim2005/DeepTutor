@@ -210,6 +210,32 @@ flowchart TB
   * `docs/DECISIONS_AND_TRAPS.md` -> pivots and landmines
   * `AGENTS.md` -> operating protocol and project map
 
+### [SUBSYSTEM: Merge Compatibility Boundary] | Aliases: requestVoid, Tooltip, render-time state, generated contracts, i18n parity
+> **1-Line Summary:** Custom UI in this fork must pass the same shared-client, accessibility, contract, and locale gates as upstream code, or a clean merge still fails verification.
+
+* **How It Works (Plain English):** Upstream v1.7.2 added architecture and i18n gates. Raw `fetch` calls, native `title` hints, and effect-based prop sync are rejected even when the behavior is correct. The fork conforms at the boundary: mutations use `requestVoid`, hints use the shared `Tooltip`, model selection is derived during render, contracts are regenerated, and new strings exist in every locale. Local behavior stays the same; only the integration surface changes.
+* **Data Flow Diagram:**
+
+```mermaid
+flowchart LR
+    UI["custom UI"] --> CLIENT["shared API client"]
+    UI --> TIP["shared Tooltip"]
+    UI --> RENDER["render-time state"]
+    UI --> I18N["locale parity"]
+    CLIENT --> GATE["release gate"]
+    TIP --> GATE
+    RENDER --> GATE
+    I18N --> GATE
+    CONTRACTS["generated contracts"] --> GATE
+```
+
+* **Code Anchors (Grep Targets):**
+  * `web/shared/api/client.ts` -> `requestVoid`
+  * `web/shared/ui/Tooltip.tsx` -> `Tooltip`
+  * `web/components/chat/home/AnswerModeMenu.tsx` -> model preference toggles
+  * `web/contracts/generated/` -> generated API and turn contracts
+  * `web/scripts/i18n_parity.mjs` -> locale key parity
+
 ## 4. Verification & Health Checks
 
 ### [VERIFY: Local Check Suite] | Aliases: tests, typecheck, compile, lint, pre-commit

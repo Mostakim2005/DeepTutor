@@ -206,7 +206,7 @@
         <div class="stat"><b>10</b><span>turn capabilities</span></div>
         <div class="stat"><b>7</b><span>export formats</span></div>
         <div class="stat"><b>19</b><span>local commits kept</span></div>
-        <div class="stat"><b>3</b><span>merge collisions resolved</span></div>
+        <div class="stat"><b>8</b><span>merge fixes recorded</span></div>
       </div>
     </div>
 
@@ -403,6 +403,10 @@
         </div>
         <div class="decision">
           <div class="num">5</div>
+          <div><h4>Keep both sides on a collision</h4><p>v1.7.2 kept the Windows launcher fallback, the uv/venv installer branches, and npm prefix-root probing while adopting upstream's shared helpers. Five UI patterns were then adapted to the new gates with no behavior change.</p></div>
+        </div>
+        <div class="decision">
+          <div class="num">6</div>
           <div><h4>Apache-2.0 stays</h4><p>PolyForm cannot be applied to a derivative of Apache-2.0 code. This is a documented exception to the protocol default.</p></div>
         </div>
       </div>
@@ -435,6 +439,10 @@
         <h4>Assuming <span class="mono">CREATE_NO_WINDOW</span> exists</h4>
         <p>Stripped Python builds lack the constant. Keep the <span class="mono">getattr</span> fallback or the app fails to launch with a traceback.</p>
       </div>
+      <div class="trap">
+        <h4>Bypassing the shared UI boundary</h4>
+        <p>Raw <span class="mono">fetch</span>, native <span class="mono">title</span> hints, and effect-based prop sync fail the v1.7.2 gates even when they work. Use <span class="mono">requestVoid</span>, <span class="mono">Tooltip</span>, and render-time state.</p>
+      </div>
     </section>
 
     <section id="health">
@@ -454,7 +462,7 @@
     </section>
 
     <footer>
-      DeepTutor personal fork · upstream <span class="mono">HKUDS/DeepTutor</span> · merged tag <span class="mono">v1.7.2</span> · documentation generated 2026-11-06.
+      DeepTutor personal fork · upstream <span class="mono">HKUDS/DeepTutor</span> · merged tag <span class="mono">v1.7.2</span> · 3 collisions + 5 repairs resolved · documentation generated 2026-11-06.
       Markdown in <span class="mono">docs/</span> is authoritative; this dashboard is a view.
     </footer>
   </main>

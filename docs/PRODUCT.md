@@ -118,6 +118,7 @@
 > **1-Line Summary:** The fork keeps a clean `upstream` remote and merges official releases on a dedicated branch so local commits remain intact and reviewable.
 * **User Intention (Non-Negotiable):** A future upstream release must be installable with a merge, not a re-implementation. Local behavior wins every collision until the human decides otherwise.
 * **Visual / UI Behavior:** Not user-facing; it protects every feature above across releases.
+* **Merge Record:** The v1.7.2 intake resolved 3 Windows collisions and 5 compatibility repairs, documented under "v1.7.2 Merge Kept Both Sides" in `docs/DECISIONS_AND_TRAPS.md`.
 * **Code Anchors (Grep Targets):**
   * `.git/config` -> `origin` (fork), `upstream` (HKUDS)
   * `deeptutor/runtime/launcher.py` -> Windows conflict hotspot
