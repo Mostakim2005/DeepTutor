@@ -272,7 +272,7 @@ def _steps(entry: CliAppEntry, env_dir) -> list[tuple[list[str], dict[str, str]]
             venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe")
             if os.path.isfile(venv_python):
                 python_exe = venv_python
-        
+
         uv_exe = shutil.which("uv")
         if uv_exe:
             return [
