@@ -52,9 +52,10 @@
   * `web/lib/export/markdown-builder.ts` -> `buildMarkdown`
 
 ### [FEATURE: Publication Vector PDF & LaTeX Hardening] | Aliases: print PDF, vector export, KaTeX errors, matrix formulas, equation systems
-> **1-Line Summary:** A browser print engine produces paginated, searchable vector PDFs, and a delimiter-safe normalizer stops cascading KaTeX failures on matrices and multi-line equations.
+> **1-Line Summary:** A browser print engine produces paginated, searchable vector PDFs, and targeted normaliser patches stop cascading KaTeX failures on matrices and multi-line equations.
 * **User Intention (Non-Negotiable):** Exported math must look correct. A malformed delimiter must not swallow every following formula in the message.
-* **Visual / UI Behavior:** PDF export offers true pagination, page numbers, and selectable Unicode text instead of a screenshot.
+* **Visual / UI Behavior:** PDF export offers true pagination, page numbers, and selectable Unicode text instead of a screenshot. Two PDF routes exist and they differ deliberately: the vector print path renders every script and every equation, while the downloaded-file path (jsPDF) is limited to Latin-1, so a conversation containing CJK, Cyrillic, Hebrew, Arabic, Devanagari, Thai or Hangul is routed to the print dialog automatically instead of producing boxes.
+* **Known Limits (Do Not Overclaim):** The DOCX OMML emitter covers fractions, roots, scripts, matrices, delimiters, accents and stacked limits. Structures it does not model fall back to child order rather than failing. The LaTeX normaliser is a set of targeted patches on the upstream pipeline, not a replacement for it.
 * **Code Anchors (Grep Targets):**
   * `web/lib/export/exporter.ts` -> `printPublicationPdf`
   * `web/lib/latex-normalize.ts` -> `wrapBareEnvironments`
@@ -69,6 +70,31 @@
   * `deeptutor/services/subagent/model_preferences.py` -> `load_model_preferences`
   * `deeptutor/api/routers/settings.py` -> `/model-preferences`, `/toggle-pin`, `/toggle-hide`
   * `web/components/chat/home/AnswerModeMenu.tsx` -> `ModelPreferenceActions`
+
+### [FEATURE: Cross-Provider Reasoning Effort Normalisation] | Aliases: reasoning effort, thinking level, Gemini 400, minimal effort, effort badges
+> **1-Line Summary:** One effort scale in the UI is translated to each provider's accepted values so a model never rejects a request with an HTTP 400.
+* **User Intention (Non-Negotiable):** Choosing "low" must not error out because a provider only speaks `none|low|medium|high`, and a promoted value must be visible rather than silent.
+* **Visual / UI Behavior:** Effort pills in the composer reflect the supported tiers for the selected model.
+* **Code Anchors (Grep Targets):**
+  * `deeptutor/services/model_selection/reasoning.py` -> `supported_reasoning_efforts`
+  * `deeptutor/services/llm/reasoning_params.py` -> `_MINIMAL_NOT_OFF_PATTERNS`
+  * `deeptutor/services/subagent/command_code.py` -> `_EFFORT_ALIASES`, `_build_command`
+
+### [FEATURE: Windows Desktop Scripts & Model Catalog Setup] | Aliases: start.bat, stop.bat, configure-ai, provider keys, DEEPTUTOR_HOME
+> **1-Line Summary:** Single-click PowerShell/Batch launchers start, stop and configure the app, and one script writes provider slots into the model catalog.
+* **User Intention (Non-Negotiable):** A Windows user can run the app without touching a terminal twice, and provider credentials are written where the runtime reads them.
+* **Visual / UI Behavior:** Not a UI surface; it protects first-run setup.
+* **Code Anchors (Grep Targets):**
+  * `start.ps1`, `stop.ps1`, `configure-ai.ps1` -> PowerShell entry points
+  * `scripts/configure_ai.py` -> `main`, provider slot enumeration
+
+### [FEATURE: Subagent Model Catalog & Composer Badges] | Aliases: Antigravity models, effort tier, model pill, friendly label
+> **1-Line Summary:** Each subagent backend publishes its live model catalog with effort tiers, and the composer renders a friendly label plus a reasoning badge.
+* **User Intention (Non-Negotiable):** A model chosen for a subagent connection shows its real capability tier, not a raw identifier.
+* **Visual / UI Behavior:** The model selector shows `ModelOptionRow` entries with a reasoning pill (`high`/`medium`/`low`).
+* **Code Anchors (Grep Targets):**
+  * `deeptutor/services/subagent/models.py` -> `_ANTIGRAVITY_MODELS`
+  * `web/components/chat/home/ModelSelector.tsx` -> `ModelOptionRow`
 
 ### [FEATURE: Subagent Backends] | Aliases: Command Code, OpenCode, Antigravity, DeepSeek Harness, Codex, Claude Code, Kimi, Grok, ACP
 > **1-Line Summary:** External coding agents run as first-class subagents with per-connection model and reasoning-effort overrides.
@@ -121,6 +147,7 @@
 * **Merge Record:** The v1.7.2 intake resolved 3 Windows collisions and 5 compatibility repairs, documented under "v1.7.2 Merge Kept Both Sides" in `docs/DECISIONS_AND_TRAPS.md`.
 * **Merge Record (v1.7.3):** The v1.7.3 intake resolved 4 decisions across 14 files (3 code, 11 locale) from 309 commits, documented under "v1.7.3 Merge Kept Both Sides". `sync/v1.7.2` was deleted because `main` already contained it; `sync/v1.7.3` is the working branch and `main` stays untouched until that branch verifies.
 * **Adopted From v1.7.3 (User-Visible):** Generic ACP subagent support, PDF reader zoom and in-page images, per-conversation reasoning-effort selector, Hindi / Hungarian / Italian languages, SearchApi and DeepSeek search providers, book chapter editing without recompiling, Docling enrichments, plus the release's runtime, mastery, parsing and LLM fixes.
+* **Audit Remediation (2026-11-19):** A fork-scoped audit closed 25 defects and 7 UI issues across the export engine, the preference service, the Command Code backend and the Windows runtime. The full item list lives in `DeepTutor-audit-fork-*.md` at the repo root; the decisions are recorded under "Fork Audit Remediation" in `docs/DECISIONS_AND_TRAPS.md`. Defect history moved to `docs/DEFECT_LOG.md` and out of upstream's `docs-for-dev/` tree.
 * **Code Anchors (Grep Targets):**
   * `.git/config` -> `origin` (fork), `upstream` (HKUDS)
   * `deeptutor/runtime/launcher.py` -> Windows conflict hotspot

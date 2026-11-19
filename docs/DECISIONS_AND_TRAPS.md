@@ -188,6 +188,41 @@ flowchart LR
   * `web/features/chat/components/ChatWorkspace.tsx` -> `KnowledgeBase`
   * `web/locales/*/app.json` -> locale key sets
 
+### [DECISION: Fork Audit Remediation] | Aliases: audit, defect sweep, duplicate tables, CJK pdf, preference race, dead code
+> **1-Line Summary:** A fork-scoped audit found 25 defects and 7 UI issues in fork-authored code; this pass closed all of them except two library migrations and one refactor, which stay deferred on purpose.
+* **Decision Maker:** `[DECIDED BY: AGENT — findings reviewed and fix pass authorised by Human]`
+* **Original User Intention:** Fix what the audit found, keep `main` untouched, and leave the documentation honest about what is fixed and what is not.
+* **Highest-Impact Fixes:**
+
+| Area | Defect | Resolution |
+| --- | --- | --- |
+| `web/lib/export/adapter.ts` -> `extractMarkdownTables` | Returned the original text, so DOCX/PDF rendered every table twice | Returns `nonTableLines.join("\n")`; the scanner is fence-aware and splits on unescaped pipes only |
+| `deeptutor/services/subagent/command_code.py` -> `consult` | Non-zero exit was reported as success whenever text had been streamed | Every non-zero exit now sets `success = False` and records an error |
+| `web/features/export/ExportChatModal.tsx` -> `selectedIds` | Selection leaked across conversations, producing empty exports | Reseeds on the closed-to-open transition only, never per render |
+| `deeptutor/services/subagent/model_preferences.py` | Read-modify-write race; shared `.tmp` name; unvalidated JSON | Locked mutation, unique temp file, `_coerce()` shape guard, mtime-keyed cache |
+| `web/lib/export/pdf-builder.ts` | Long code blocks and prompts were clipped silently | Both paginate across pages instead of drawing past the edge |
+| `web/lib/export/html-builder.ts` | `javascript:` URLs survived into a shared HTML file | `safeHref()` allowlists `http`/`https`/`mailto` only |
+| `web/lib/export/omml.ts` | Accents and stacked limits were dropped; `ACCENTS` was dead code | `mover`/`munder`/`munderover`/`menclose` implemented; depth capped at 60 |
+| `deeptutor/runtime/launcher.py` | `close_fds=False` on Windows could hold the listening port | Restored `close_fds=True`; `CREATE_NO_WINDOW` still suppresses the console |
+
+* **Deliberate Non-Goals (Documented, Not Done):**
+  * **DOCX library migration** (`dolanmiu/docx`) — deferred until the bug fixes above have a release behind them, so one change does not mix a rewrite with behaviour fixes.
+  * **PDF byte-stream rewrite** (`pdf-lib`) — instead, non-Latin conversations are routed to the existing vector print path, which is already correct for every script. jsPDF remains for Latin-only downloads and is now labelled as such in `docs/PRODUCT.md`.
+  * **`ExportChatModal` decomposition** — deferred; the selection fix landed first, and splitting 825 lines now would have rewritten the same code twice.
+  * **HTML builder's private table parser** — kept as a fallback for text that still reaches the markdown renderer; the adapter's tokenizer is canonical for structured tables.
+  * **Focus trap** — the dialog now has `role="dialog"`, `aria-modal`, Escape-to-close and initial focus; cycling Tab within the dialog is still absent.
+  * **CSRF/origin guard on preference mutations** — size and length validation landed; an origin check was not added because the router's existing auth model was out of scope for this pass.
+
+* **Known Pre-Existing Failure (Not Caused Here):** `web/scripts/i18n_parity.mjs` fails on `features/settings/sections/*` jsxText (`"MB"`, `"tokens"`, `"parse-"`). Verified identical with these changes stashed; it is an upstream gate failure, not a regression.
+* **Code Anchors (Grep Targets):**
+  * `web/lib/export/adapter.ts` -> `extractMarkdownTables`, `splitTableRow`, `normalizeMessages`
+  * `web/lib/export/exporter.ts` -> `assertExportSize`, `printPublicationPdf`, `triggerDownload`
+  * `web/lib/export/types.ts` -> `EXPORT_LIMITS`, `MAX_EXPORT_CHARS`
+  * `web/features/export/ExportChatModal.tsx` -> `NON_LATIN_SCRIPT`, `wasOpen`
+  * `deeptutor/services/subagent/model_preferences.py` -> `_coerce`, `_WRITE_LOCK`, `_stamp`
+  * `deeptutor/services/subagent/command_code.py` -> `_MAX_PROMPT_CHARS`, `_session_exists`, `_EFFORT_ALIASES`
+  * `docs/DEFECT_LOG.md` -> migrated defect history
+
 ### [DECISION: Apache-2.0 License Stays] | Aliases: licensing, PolyForm, fork license, attribution
 > **1-Line Summary:** The fork keeps the upstream Apache-2.0 license because a fork cannot relicense Apache-2.0 code; this is a deliberate exception to the agent protocol's default PolyForm rule.
 * **Decision Maker:** `[DECIDED BY: AGENT — flagged to Human]`

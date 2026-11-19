@@ -216,6 +216,41 @@ flowchart TB
 * **How It Works (Plain English):** Upstream v1.7.2 added architecture and i18n gates. Raw `fetch` calls, native `title` hints, and effect-based prop sync are rejected even when the behavior is correct. The fork conforms at the boundary: mutations use `requestVoid`, hints use the shared `Tooltip`, model selection is derived during render, contracts are regenerated, and new strings exist in every locale. Local behavior stays the same; only the integration surface changes.
 
 * **v1.7.3 Intake Note:** Locale files now diverge far enough that a text-level merge of `web/locales/*/app.json` corrupts the JSON (verified: every conflicted locale fails to parse). Locale collisions are therefore resolved at key level instead — load both sides as objects, deep-merge with local keys winning, re-serialize with `indent=2` and `ensure_ascii=False`. That combination round-trips upstream files byte-for-byte, so the merge diff stays reviewable.
+
+### [SUBSYSTEM: Export Pipeline Ownership] | Aliases: export adapter, table extraction, pdf routes, script coverage, size guard
+> **1-Line Summary:** The adapter owns normalisation and table extraction; each builder renders the normalised object and never re-parses the message body.
+
+* **How It Works (Plain English):** `normalizeMessages` converts raw chat messages into `NormalizedExportMessage` once. Table extraction happens *there*, and the message body it returns has the table markdown removed. Builders therefore receive two separate things — table-free prose and a structured `tables` array — and each renders both natively. When the body still contained the original markdown, DOCX and PDF printed the table twice.
+* **Data Flow Diagram:**
+
+```mermaid
+flowchart LR
+    RAW["raw chat messages"] --> NORM["adapter.normalizeMessages"]
+    NORM --> BODY["cleanedText (table-free)"]
+    NORM --> TBL["tables[]"]
+    BODY --> DOCX["docx-builder"]
+    TBL --> DOCX
+    BODY --> PDF["pdf-builder"]
+    TBL --> PDF
+    BODY --> HTML["html-builder"]
+    TBL --> HTML
+```
+
+* **Two PDF Routes (Intentional):** `printPublicationPdf` typesets through the browser and is correct for every script and every equation. `buildPdfBlob` (jsPDF) produces a downloadable byte stream but its built-in fonts are Latin-1 only, so a conversation containing CJK, Cyrillic, Hebrew, Arabic, Devanagari, Thai or Hangul is routed to the print path by `ExportChatModal` instead of emitting tofu boxes. Closing that gap properly means embedding a subsetted Unicode font, tracked as a deferred migration.
+* **Shared Budgets:** `EXPORT_LIMITS` (tool result, artifact text, citation snippet) and `MAX_EXPORT_CHARS` live in `web/lib/export/types.ts`. Builders must consume them rather than inventing local `slice()` caps — that divergence is what made the same conversation export different amounts per format.
+* **Code Anchors (Grep Targets):**
+  * `web/lib/export/adapter.ts` -> `normalizeMessages`, `extractMarkdownTables`, `splitTableRow`
+  * `web/lib/export/types.ts` -> `EXPORT_LIMITS`, `MAX_EXPORT_CHARS`
+  * `web/lib/export/exporter.ts` -> `exportSession`, `assertExportSize`, `printPublicationPdf`
+  * `web/features/export/ExportChatModal.tsx` -> `NON_LATIN_SCRIPT`
+
+### [SUBSYSTEM: Model Preference Concurrency] | Aliases: preference race, atomic write, mtime cache, human-editable json
+> **1-Line Summary:** Preference reads are cached by file stamp and every mutation is serialised under a lock, so two open tabs cannot overwrite each other.
+
+* **How It Works (Plain English):** The preferences file is user-editable by design, so reads are defensive: `_coerce()` drops anything that is not the expected shape instead of letting a stray string turn membership tests into substring matching. Mutations take `_WRITE_LOCK`, re-read inside the lock, and replace the file atomically via a unique temp file. Predicate helpers (`is_pinned`, `is_hidden`, `get_display_name`) serve from a cache keyed on the file's `(path, mtime_ns, size)` stamp rather than re-parsing JSON per model in a list response.
+* **Code Anchors (Grep Targets):**
+  * `deeptutor/services/subagent/model_preferences.py` -> `_coerce`, `_WRITE_LOCK`, `_stamp`, `prune_unknown`
+  * `deeptutor/api/routers/settings.py` -> `update_model_preferences`
 * **Data Flow Diagram:**
 
 ```mermaid

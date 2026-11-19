@@ -63,7 +63,7 @@ After completing any feature, architectural change, or significant fix:
 
 ---
 
-# Project Context: DeepTutor (v1.7.2)
+# Project Context: DeepTutor (v1.7.3)
 
 > **1-Line Summary:** Agent-native tutoring app where CLI, WebSocket, and SDK requests share one durable turn service; this fork adds a browser export engine, extra subagent backends, model pinning, and Windows fixes.
 
@@ -81,12 +81,12 @@ Entry points (`deeptutor_cli/main.py`, `deeptutor/api/routers/unified_ws.py`, `d
 | Area | Where | Why it exists |
 | --- | --- | --- |
 | Export engine | `web/lib/export/`, `web/features/export/ExportChatModal.tsx` | Seven formats with element toggles, OMML equations, vector PDF, and update resilience. |
-| KaTeX hardening | `web/lib/latex-normalize.ts` | Stops cascading parse failures on matrices and multi-line equations. |
+| LaTeX normalisation patches | `web/lib/latex-normalize.ts` (`wrapBareEnvironments`), `web/lib/latex.ts` (`findDisplayClose`), `web/lib/markdown-display.ts` (`PROTECTED_SPAN_REGEX`) | Targeted fixes on top of the upstream pipeline: never re-wrap an environment already inside a math block, tolerate blank lines in display math while bailing on prose, and protect inline math from the markdown pass. Not a rewrite of those files. |
 | Model preferences | `data/user/settings/model_preferences.json`, `deeptutor/services/subagent/model_preferences.py`, `deeptutor/api/routers/settings.py` | Friendly names, star pinning, hidden-model drawer. |
 | Subagents | `deeptutor/services/subagent/` | Command Code, OpenCode, Antigravity, DeepSeek Harness, and per-connection model/effort overrides. |
 | Windows launcher | `deeptutor/runtime/launcher.py` | Detached start without console leaks; `CREATE_NO_WINDOW` fallback. |
 | CLI apps | `deeptutor/services/cli_apps/` | uv/venv install parity, per-app environments, Windows `.cmd` resolution. |
-| Workspaces & skills | `deeptutor/services/workspace/`, `data/user/workspaces/*/skills/` | STEM & Engineering and Polymath & Cognitive, Zettelkasten/LightRAG, Feynman persona. |
+| Workspaces & skills | `deeptutor/services/workspace/`, `data/user/workspaces/*/skills/` | STEM & Engineering and Polymath & Cognitive, Zettelkasten/LightRAG, and the personas under `data/user/workspace/personas/` (`layman` carries the Feynman-style explanation contract; there is no directory literally named `feynman`). |
 
 ## Verification
 

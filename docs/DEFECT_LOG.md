@@ -1,4 +1,7 @@
-# DeepTutor Defect & Resolution Log (Level 2-3)
+# Fork Defect & Resolution Log | Aliases: bug log, RCA, resolved defects, root cause, regression history
+> **1-Line Summary:** Root-cause records for defects fixed in this fork, kept so a future sync does not reintroduce them; file+symbol anchors only, never line numbers.
+
+This log was migrated out of `docs-for-dev/` (upstream's tree) so fork records stop colliding with upstream documentation on every release merge. Entries describe fork-authored fixes; upstream defects are tracked upstream.
 
 ### BUG-001: Windows Pip Entrypoint Stub `deeptutor.exe -m`
 - **Symptom**: `deeptutor start` spawned `[sys.executable, "-m", "deeptutor_cli.main", "serve"]`, throwing `Error: No such option: -m`.
