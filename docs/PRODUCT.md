@@ -70,7 +70,7 @@
   * `deeptutor/api/routers/settings.py` -> `/model-preferences`, `/toggle-pin`, `/toggle-hide`
   * `web/components/chat/home/AnswerModeMenu.tsx` -> `ModelPreferenceActions`
 
-### [FEATURE: Subagent Backends] | Aliases: Command Code, OpenCode, Antigravity, DeepSeek Harness, Codex, Claude Code, Kimi, Grok
+### [FEATURE: Subagent Backends] | Aliases: Command Code, OpenCode, Antigravity, DeepSeek Harness, Codex, Claude Code, Kimi, Grok, ACP
 > **1-Line Summary:** External coding agents run as first-class subagents with per-connection model and reasoning-effort overrides.
 * **User Intention (Non-Negotiable):** Each backend keeps its own transport and session rules; model and effort choices made in the composer must reach the backend exactly.
 * **Visual / UI Behavior:** The composer lists available subagents and their model tiers; a run streams its transcript into the chat.
@@ -114,11 +114,13 @@
   * `data/user/workspaces/*/skills/` -> installed skill files
   * `data/user/workspace/personas/layman/PERSONA.md` -> layman persona definition
 
-### [FEATURE: Upstream Sync Without Regression] | Aliases: fork, merge upstream, v1.7.2, origin, upstream remote
+### [FEATURE: Upstream Sync Without Regression] | Aliases: fork, merge upstream, v1.7.2, v1.7.3, origin, upstream remote
 > **1-Line Summary:** The fork keeps a clean `upstream` remote and merges official releases on a dedicated branch so local commits remain intact and reviewable.
 * **User Intention (Non-Negotiable):** A future upstream release must be installable with a merge, not a re-implementation. Local behavior wins every collision until the human decides otherwise.
 * **Visual / UI Behavior:** Not user-facing; it protects every feature above across releases.
 * **Merge Record:** The v1.7.2 intake resolved 3 Windows collisions and 5 compatibility repairs, documented under "v1.7.2 Merge Kept Both Sides" in `docs/DECISIONS_AND_TRAPS.md`.
+* **Merge Record (v1.7.3):** The v1.7.3 intake resolved 4 decisions across 14 files (3 code, 11 locale) from 309 commits, documented under "v1.7.3 Merge Kept Both Sides". `sync/v1.7.2` was deleted because `main` already contained it; `sync/v1.7.3` is the working branch and `main` stays untouched until that branch verifies.
+* **Adopted From v1.7.3 (User-Visible):** Generic ACP subagent support, PDF reader zoom and in-page images, per-conversation reasoning-effort selector, Hindi / Hungarian / Italian languages, SearchApi and DeepSeek search providers, book chapter editing without recompiling, Docling enrichments, plus the release's runtime, mastery, parsing and LLM fixes.
 * **Code Anchors (Grep Targets):**
   * `.git/config` -> `origin` (fork), `upstream` (HKUDS)
   * `deeptutor/runtime/launcher.py` -> Windows conflict hotspot

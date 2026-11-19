@@ -150,6 +150,44 @@ flowchart LR
   * `web/scripts/generate-contracts.mjs` -> `--check`
   * `web/scripts/i18n_parity.mjs` -> locale key parity
 
+### [DECISION: v1.7.3 Merge Kept Both Sides] | Aliases: merge record, ACP backend, locale key merge, launcher interpreter, macOS exclusion, sync branch
+> **1-Line Summary:** The v1.7.3 intake collapsed 309 commits into four decisions and kept both sides everywhere the two branches simply added different things; the only intentional loss is macOS framework-Python detection.
+* **Decision Maker:** `[DECIDED BY: HUMAN — keep-both on every additive collision, Windows-only launcher]`
+* **Original User Intention:** Absorb every v1.7.3 feature without dropping Command Code, pinning/hiding, export, or Windows launcher behavior, and keep `main` untouched until the sync branch verifies.
+* **Intake Shape:** Upstream shipped the entire gap as one tag (`v1.7.3`), so the gap was not divisible into "safe commits" and "risky commits". 198 non-merge commits changed 564 files; 173 of those commits touch nothing in the fork. Only 14 files collided (3 code, 11 locale), producing four decisions.
+* **Collisions and Resolutions:**
+
+| File | Local behavior | Upstream change | Resolution |
+| --- | --- | --- | --- |
+| `deeptutor/services/subagent/registry.py` | Registers `CommandCodeBackend()` | Registers new generic `AcpBackend()` on the adjacent line | Kept both entries; ACP agents plug in alongside Command Code |
+| `web/features/chat/components/ChatWorkspace.tsx` | `display_name`, `is_pinned`, `is_hidden` on `KnowledgeBase` | `available`, `status` on the same interface | Kept both field sets; purely additive, no behavior overlap |
+| `deeptutor/runtime/launcher.py` | Compares against `_python_interpreter()` | Introduces a local `interpreter` from `psutil.Process().exe()` for macOS framework Python | Kept `_python_interpreter()`; macOS detection deliberately not used (see below) |
+| `web/locales/*/app.json` (11 files) | 6,632 keys including export and model-preference strings | 6,663 keys with new release strings | Key-level JSON deep merge; 6,712 keys, nothing lost from either side |
+* **Deliberate Exclusion (macOS):** The fork targets Windows. Upstream's `psutil.Process().exe()` comparison exists so framework Python on macOS is not mistaken for a foreign interpreter. The merge keeps the shared `_python_interpreter()` path instead and carries an inline comment marking this an intentional fork deviation. Reinstating it later means restoring the `psutil` assignment and comparing against that local variable.
+* **Why Locales Need Key-Level Merges:** A text-level union of two JSON objects produces duplicate or missing commas and breaks parsing — verified by test, all 13 locale files failed. Merging parsed objects instead preserves both key sets. Re-serialize with `indent=2` and `ensure_ascii=False`, which round-trips upstream files byte-for-byte.
+* **Visual Pivot Map (What Failed vs. What Works):**
+
+```mermaid
+flowchart LR
+    UP["v1.7.3 tag"] --> MERGE["merge on sync/v1.7.3"]
+    LOCAL["fork features"] --> MERGE
+    MERGE --> A["ACP + Command Code"]
+    MERGE --> B["KB fields both sides"]
+    MERGE --> C["locale key merge"]
+    MERGE --> D["Windows interpreter only"]
+    A --> VERIFY["compileall + typecheck"]
+    B --> VERIFY
+    C --> VERIFY
+    D --> VERIFY
+    VERIFY --> FF["fast-forward main when approved"]
+```
+
+* **Code Anchors (Grep Targets):**
+  * `deeptutor/runtime/launcher.py` -> `_python_interpreter`, `_reclaim_owned_backend`
+  * `deeptutor/services/subagent/registry.py` -> `_BACKENDS`
+  * `web/features/chat/components/ChatWorkspace.tsx` -> `KnowledgeBase`
+  * `web/locales/*/app.json` -> locale key sets
+
 ### [DECISION: Apache-2.0 License Stays] | Aliases: licensing, PolyForm, fork license, attribution
 > **1-Line Summary:** The fork keeps the upstream Apache-2.0 license because a fork cannot relicense Apache-2.0 code; this is a deliberate exception to the agent protocol's default PolyForm rule.
 * **Decision Maker:** `[DECIDED BY: AGENT — flagged to Human]`

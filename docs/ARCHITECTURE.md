@@ -214,6 +214,8 @@ flowchart TB
 > **1-Line Summary:** Custom UI in this fork must pass the same shared-client, accessibility, contract, and locale gates as upstream code, or a clean merge still fails verification.
 
 * **How It Works (Plain English):** Upstream v1.7.2 added architecture and i18n gates. Raw `fetch` calls, native `title` hints, and effect-based prop sync are rejected even when the behavior is correct. The fork conforms at the boundary: mutations use `requestVoid`, hints use the shared `Tooltip`, model selection is derived during render, contracts are regenerated, and new strings exist in every locale. Local behavior stays the same; only the integration surface changes.
+
+* **v1.7.3 Intake Note:** Locale files now diverge far enough that a text-level merge of `web/locales/*/app.json` corrupts the JSON (verified: every conflicted locale fails to parse). Locale collisions are therefore resolved at key level instead — load both sides as objects, deep-merge with local keys winning, re-serialize with `indent=2` and `ensure_ascii=False`. That combination round-trips upstream files byte-for-byte, so the merge diff stays reviewable.
 * **Data Flow Diagram:**
 
 ```mermaid
