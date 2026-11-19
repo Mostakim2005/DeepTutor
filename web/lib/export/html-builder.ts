@@ -9,6 +9,7 @@ import katex from "katex";
 import type {
   ExportFilterOptions,
   ExportMetadata,
+  ExportTable,
   NormalizedExportMessage,
 } from "./types";
 
@@ -19,6 +20,47 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+
+/**
+ * Returns an escaped href only for schemes that cannot execute.
+ *
+ * Citation URLs come from web-search results, i.e. untrusted input. Escaping
+ * neutralises markup but leaves `javascript:` intact, which would run inside a
+ * file the user shares. `safeHref` drops every other scheme instead.
+ */
+function safeHref(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (!SAFE_LINK_PROTOCOLS.has(parsed.protocol)) return null;
+    if (!parsed.host) return null;
+    return escapeHtml(parsed.toString());
+  } catch {
+    return null;
+  }
+}
+
+/** Renders extracted tables as native HTML tables. */
+function renderTables(tables: ExportTable[]): string {
+  let html = "";
+  for (const table of tables) {
+    html += '<div class="table-container"><table><thead><tr>';
+    for (const header of table.headers) {
+      html += `<th>${escapeHtml(header)}</th>`;
+    }
+    html += "</tr></thead><tbody>";
+    for (const row of table.rows) {
+      html += "<tr>";
+      for (const cell of row) {
+        html += `<td>${escapeHtml(cell)}</td>`;
+      }
+      html += "</tr>";
+    }
+    html += "</tbody></table></div>";
+  }
+  return html;
 }
 
 function parseMarkdownTable(lines: string[]): string {
@@ -346,11 +388,20 @@ export function buildPublicationHtml(
       msgContent += `<div class="message-body">${markdownToHtml(msg.content)}</div>`;
     }
 
+    // Tables. The body no longer carries the source markdown, so this is the
+    // only render path — and the "Data Tables" toggle now actually applies.
+    if (options.includeTables && msg.tables?.length) {
+      msgContent += renderTables(msg.tables);
+    }
+
     // Sources & Citations
     if (options.includeSources && msg.sources?.length) {
       msgContent += `<div class="sources-list"><h5>Sources &amp; Citations</h5><ol>`;
       for (const src of msg.sources) {
-        msgContent += `<li><a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(src.title)}</a></li>`;
+        const href = safeHref(src.url);
+        msgContent += href
+          ? `<li><a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(src.title)}</a></li>`
+          : `<li>${escapeHtml(src.title)} <code>${escapeHtml(src.url)}</code></li>`;
       }
       msgContent += `</ol></div>`;
     }

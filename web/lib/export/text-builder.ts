@@ -7,6 +7,7 @@ import type {
   ExportMetadata,
   NormalizedExportMessage,
 } from "./types";
+import { EXPORT_LIMITS } from "./types";
 
 export function buildJsonString(
   messages: NormalizedExportMessage[],
@@ -93,7 +94,7 @@ export function buildTextString(
       for (const call of msg.toolCalls) {
         parts.push(`[TOOL CALL]: ${call.name}`);
         if (options.includeToolResults && call.result) {
-          parts.push(`[TOOL RESULT]: ${call.result.slice(0, 500)}`);
+          parts.push(`[TOOL RESULT]: ${call.result.slice(0, EXPORT_LIMITS.toolResult)}`);
         }
       }
       parts.push("");
@@ -101,6 +102,22 @@ export function buildTextString(
 
     if (msg.content?.trim()) {
       parts.push(msg.content.trim() + "\n");
+    }
+
+    // The body no longer carries the source markdown of a table, so plain text
+    // would otherwise lose every table entirely.
+    if (options.includeTables && msg.tables?.length) {
+      for (const tbl of msg.tables) {
+        if (tbl.title) {
+          parts.push(tbl.title);
+        }
+        parts.push(tbl.headers.join(" | "));
+        parts.push(tbl.headers.map(() => "---").join(" | "));
+        for (const row of tbl.rows) {
+          parts.push(row.join(" | "));
+        }
+        parts.push("");
+      }
     }
 
     if (options.includeSources && msg.sources?.length) {

@@ -1345,7 +1345,11 @@ def _launch_detached(
         "env": env,
         "stdin": subprocess.DEVNULL,
         "stderr": subprocess.STDOUT,
-        "close_fds": sys.platform != "win32",
+        # Keep close_fds on: with it disabled the child inherits every
+        # inheritable handle, including the listening socket, which keeps the
+        # port bound after a restart. CREATE_NO_WINDOW handles the console
+        # flash on its own.
+        "close_fds": True,
         "shell": False,
     }
     if sys.platform == "win32":

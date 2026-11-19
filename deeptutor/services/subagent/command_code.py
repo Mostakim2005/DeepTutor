@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 import json
 import logging
+import os
 from pathlib import Path
+import time
 from typing import Any
 
 from deeptutor.services.subagent.base import OnEvent, SubagentBackend
@@ -28,6 +31,30 @@ from deeptutor.services.subagent.types import (
 
 logger = logging.getLogger(__name__)
 
+# Windows caps a command line near 32K characters; leave room for the flags we
+# append and refuse the call with a readable message instead of an OS error.
+_MAX_PROMPT_CHARS = 24_000
+
+# ``--session`` is only valid for a session that already exists on disk. The
+# probe is a filesystem scan, so memoise it briefly instead of walking the
+# project tree on every consult.
+_SESSION_CACHE: dict[str, tuple[float, bool]] = {}
+_SESSION_CACHE_TTL = 30.0
+_MAX_SESSION_FILES = 400
+
+# Bound the stderr we retain: a looping CLI must not grow this list forever.
+_MAX_STDERR_LINES = 200
+
+# The UI offers a wider effort scale than the CLI accepts. Aliases are explicit
+# and logged, never silent, so a promoted value is visible in the log.
+_EFFORT_ALIASES = {
+    "medium": "high",
+    "default": "high",
+    "none": "off",
+    "minimal": "off",
+}
+_EFFORT_SUPPORTED = ("off", "low", "high", "max")
+
 
 class CommandCodeBackend(SubagentBackend):
     kind = "command_code"
@@ -44,22 +71,44 @@ class CommandCodeBackend(SubagentBackend):
             detail="" if ok else (text or "cmdc CLI not found on PATH"),
         )
 
-    def _session_exists(self, sid: str) -> bool:
-        if not sid:
-            return False
+    def _scan_session_exists(self, sid: str) -> bool:
         base = Path.home() / ".commandcode" / "projects"
         if not base.exists():
             return False
-        for proj in base.iterdir():
-            if proj.is_dir():
+        scanned = 0
+        try:
+            projects = list(base.iterdir())
+        except OSError:
+            return False
+        for proj in projects:
+            try:
+                if not proj.is_dir():
+                    continue
                 if (proj / f"{sid}.jsonl").exists():
                     return True
                 for f in proj.glob("*.jsonl"):
+                    scanned += 1
+                    if scanned > _MAX_SESSION_FILES:
+                        return False
                     if not f.name.endswith(".checkpoints.jsonl") and f.name.startswith(sid):
                         return True
+            except OSError:
+                # A locked or permission-denied directory must not abort the consult.
+                continue
         return False
 
-    def _build_command(
+    async def _session_exists(self, sid: str) -> bool:
+        if not sid:
+            return False
+        now = time.monotonic()
+        cached = _SESSION_CACHE.get(sid)
+        if cached and now - cached[0] < _SESSION_CACHE_TTL:
+            return cached[1]
+        exists = await asyncio.to_thread(self._scan_session_exists, sid)
+        _SESSION_CACHE[sid] = (now, exists)
+        return exists
+
+    async def _build_command(
         self,
         question: str,
         *,
@@ -73,7 +122,7 @@ class CommandCodeBackend(SubagentBackend):
             "--output-format",
             "json",
         ]
-        if session_id and self._session_exists(session_id):
+        if session_id and await self._session_exists(session_id):
             cmd += ["--session", session_id]
 
         if config.auto_approve:
@@ -81,12 +130,15 @@ class CommandCodeBackend(SubagentBackend):
         if config.model:
             cmd += ["--model", config.model]
         if config.effort:
-            effort = config.effort.lower().strip()
-            if effort in ("medium", "default"):
-                effort = "high"
-            elif effort in ("none", "minimal"):
-                effort = "off"
-            if effort in ("off", "low", "high", "max"):
+            requested = config.effort.lower().strip()
+            effort = _EFFORT_ALIASES.get(requested, requested)
+            if effort in _EFFORT_SUPPORTED:
+                if effort != requested:
+                    logger.info(
+                        "Command-Code effort '%s' mapped to '%s' for the CLI",
+                        requested,
+                        effort,
+                    )
                 cmd += ["--effort", effort]
         cmd += list(config.extra_args)
         return cmd
@@ -103,7 +155,6 @@ class CommandCodeBackend(SubagentBackend):
         partner_id: str | None = None,
     ) -> ConsultResult:
         config = config or BackendConfig()
-        cmd = self._build_command(question, session_id=session_id, config=config)
         result = ConsultResult(session_id=session_id)
 
         async def emit(
@@ -112,13 +163,26 @@ class CommandCodeBackend(SubagentBackend):
             result.event_count += 1
             await on_event(SubagentEvent(kind=kind, text=text, raw=raw, meta=meta or {}))
 
+        if os.name == "nt" and len(question) > _MAX_PROMPT_CHARS:
+            result.success = False
+            result.error = (
+                f"The question is too long for the Windows command line "
+                f"({len(question)} characters, limit {_MAX_PROMPT_CHARS}). "
+                f"Shorten the message or split it into parts."
+            )
+            await emit(EVENT_ERROR, result.error, {"reason": "prompt_too_long"})
+            return result
+
+        cmd = await self._build_command(question, session_id=session_id, config=config)
+
         stderr_lines: list[str] = []
         try:
             async for channel, line in stream_process_lines(cmd, cwd=cwd):
                 if channel == "exit":
-                    if line != "0" and result.success and not result.final_text:
+                    if line != "0":
                         err_detail = " ".join(stderr_lines).strip()
-                        # Automatic effort fallback if model does not support this reasoning effort
+                        # A model that rejects the requested reasoning effort is
+                        # recoverable: retry once at the model default.
                         if config.effort and any(
                             phrase in err_detail.lower()
                             for phrase in ("no adjustable reasoning", "unknown effort", "reasoning effort")
@@ -139,13 +203,27 @@ class CommandCodeBackend(SubagentBackend):
                                 images=images,
                                 partner_id=partner_id,
                             )
+                        # Every non-zero exit is a failure, even when the CLI
+                        # streamed partial text or already reported its own
+                        # error: leaving ``success`` true hides the failure.
                         result.success = False
-                        result.error = f"cmdc exited with code {line}: {err_detail}" if err_detail else f"cmdc exited with code {line}"
-                        await emit(EVENT_ERROR, result.error, {"returncode": line, "stderr": err_detail})
+                        if not result.error:
+                            result.error = (
+                                f"cmdc exited with code {line}: {err_detail}"
+                                if err_detail
+                                else f"cmdc exited with code {line}"
+                            )
+                        await emit(
+                            EVENT_ERROR,
+                            result.error,
+                            {"returncode": line, "stderr": err_detail},
+                        )
                     continue
                 if channel == "stderr":
                     if line.strip():
                         stderr_lines.append(line.strip())
+                        if len(stderr_lines) > _MAX_STDERR_LINES:
+                            del stderr_lines[: len(stderr_lines) - _MAX_STDERR_LINES]
                         await emit(EVENT_LOG, line, {"stream": "stderr"})
                     continue
 

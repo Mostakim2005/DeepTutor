@@ -96,7 +96,9 @@ async def stream_process_lines(
         stderr=asyncio.subprocess.PIPE,
     )
 
-    queue: asyncio.Queue[ProcessLine | None] = asyncio.Queue()
+    # Bounded so a CLI that floods stdout applies backpressure to its own pipe
+    # instead of growing an unbounded queue while the renderer drains slowly.
+    queue: asyncio.Queue[ProcessLine | None] = asyncio.Queue(maxsize=2048)
 
     async def _pump(stream: asyncio.StreamReader | None, channel: str) -> None:
         if stream is None:

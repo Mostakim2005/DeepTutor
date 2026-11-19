@@ -84,7 +84,19 @@ function findDisplayClose(lines: string[], start: number): number {
       continue;
     }
     consecutiveEmpty = 0;
-    if (trimmed.startsWith("#") || trimmed.startsWith("```")) return -1;
+    // An unterminated display block must not swallow the rest of the answer.
+    // Bail on any construct that is unambiguously prose, and cap the scan.
+    if (
+      j - start > 200 ||
+      trimmed.startsWith("#") ||
+      trimmed.startsWith("```") ||
+      trimmed.startsWith(">") ||
+      trimmed.startsWith("|") ||
+      /^([-*+]|\d+\.)\s/.test(trimmed) ||
+      /^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)
+    ) {
+      return -1;
+    }
     const fences = countFences(trimmed);
     if (fences === 0) continue;
     return fences === 1 && trimmed.endsWith("$$") ? j : -1;

@@ -24,7 +24,6 @@ export interface InputMessage {
     type?: string;
     filename?: string;
     mime_type?: string;
-    base64?: string;
     url?: string;
     extracted_text?: string;
   }>;
@@ -33,41 +32,86 @@ export interface InputMessage {
   model?: string;
 }
 
-/** Parses markdown tables from a block of text */
+/** Matches a fenced-code delimiter so tables inside code blocks are ignored. */
+const FENCE_DELIMITER = /^(`{3,}|~{3,})/;
+
+const TABLE_SEPARATOR = /^\|(?:\s*:?-+:?\s*\|)+$/;
+
+/**
+ * Splits one table row on unescaped pipes only, so `a \| b` stays one cell.
+ */
+function splitTableRow(line: string): string[] {
+  const inner = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  const cells: string[] = [];
+  let current = "";
+
+  for (let i = 0; i < inner.length; i += 1) {
+    const char = inner[i];
+    if (char === "\\" && inner[i + 1] === "|") {
+      current += "|";
+      i += 1;
+      continue;
+    }
+    if (char === "|") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+/**
+ * Parses markdown tables out of a block of text and returns the text without
+ * them. Callers render `tables` natively, so `cleanedText` — not the original
+ * string — is what belongs in the message body; returning the original here
+ * duplicated every table in DOCX/PDF output.
+ */
 export function extractMarkdownTables(text: string): {
   tables: ExportTable[];
   cleanedText: string;
 } {
-  const tables: ExportTable[] = [];
   const lines = text.split("\n");
-  const nonTableLines: string[] = [];
+  const tables: ExportTable[] = [];
+  const kept: string[] = [];
+  let fence: string | null = null;
 
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i].trim();
-    // Check if line looks like a table row: starts and ends with '|'
-    if (line.startsWith("|") && line.endsWith("|")) {
+    const raw = lines[i];
+    const line = raw.trim();
+
+    const fenceMatch = line.match(FENCE_DELIMITER);
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0];
+      if (fence === null) fence = marker;
+      else if (fence === marker) fence = null;
+      kept.push(raw);
+      i += 1;
+      continue;
+    }
+
+    // A table may only start outside a fenced code block.
+    if (fence === null && line.length > 1 && line.startsWith("|") && line.endsWith("|")) {
       const nextLine = (lines[i + 1] || "").trim();
-      // Check if next line is table separator: e.g. |---|---| or | :--- | :---: |
       if (
         nextLine.startsWith("|") &&
         nextLine.endsWith("|") &&
-        /^\|(?:\s*:?-+:?\s*\|)+$/.test(nextLine)
+        TABLE_SEPARATOR.test(nextLine)
       ) {
-        const headers = line
-          .slice(1, -1)
-          .split("|")
-          .map((c) => c.trim());
+        const headers = splitTableRow(line);
         const rows: string[][] = [];
 
         i += 2; // skip header and separator
-        while (i < lines.length && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
-          const rowCells = lines[i]
-            .trim()
-            .slice(1, -1)
-            .split("|")
-            .map((c) => c.trim());
-          rows.push(rowCells);
+        while (i < lines.length) {
+          const rowLine = lines[i].trim();
+          if (rowLine.length < 2 || !rowLine.startsWith("|") || !rowLine.endsWith("|")) {
+            break;
+          }
+          rows.push(splitTableRow(rowLine));
           i += 1;
         }
 
@@ -76,11 +120,11 @@ export function extractMarkdownTables(text: string): {
       }
     }
 
-    nonTableLines.push(lines[i]);
+    kept.push(raw);
     i += 1;
   }
 
-  return { tables, cleanedText: text };
+  return { tables, cleanedText: kept.join("\n") };
 }
 
 /** Extracts <think>...</think> blocks from content (DeepSeek-R1 style) */
@@ -151,12 +195,18 @@ export function normalizeMessages(
             const entry = toolCallsMap.get(callId)!;
             entry.result = event.content;
           } else {
-            // Match last tool call without result
-            const last = Array.from(toolCallsMap.values())
-              .reverse()
-              .find((c) => !c.result);
-            if (last) {
-              last.result = event.content;
+            // Never guess: with parallel or out-of-order tool events a
+            // positional heuristic attaches a result to the wrong call. Keep
+            // it as its own unattributed observation instead.
+            const observationId = callId || `observation_${toolCallsMap.size + 1}`;
+            if (!toolCallsMap.has(observationId)) {
+              toolCallsMap.set(observationId, {
+                id: observationId,
+                name: "result",
+                stage: event.stage,
+                timestamp: event.timestamp,
+                result: event.content,
+              });
             }
           }
         } else if (event.type === "sources") {
@@ -181,8 +231,8 @@ export function normalizeMessages(
       }
     }
 
-    // 3. Extract Tables
-    const { tables } = extractMarkdownTables(content);
+    // 3. Extract Tables (the body must not keep the source markdown as well)
+    const { tables, cleanedText } = extractMarkdownTables(content);
 
     // 4. Process Attachments
     if (msg.attachments && Array.isArray(msg.attachments)) {
@@ -203,7 +253,7 @@ export function normalizeMessages(
         | "user"
         | "assistant",
       speaker: msg.speaker,
-      content,
+      content: cleanedText,
       capability: msg.capability,
       model: msg.model,
       timestamp: msg.timestamp || msg.created_at,

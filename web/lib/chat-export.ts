@@ -1,3 +1,5 @@
+import { sanitizeFilename, triggerDownload } from "./export/exporter";
+
 /**
  * Minimal message/attachment shape the markdown exporter needs. Product chat's
  * `MessageItem` satisfies it structurally, and partner conversations map into
@@ -66,14 +68,6 @@ export function buildChatMarkdown(
   return header + body + "\n";
 }
 
-function sanitizeFilename(input: string): string {
-  const cleaned = input
-    .replace(/[\\/:*?"<>|\n\r\t]/g, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 60);
-  return cleaned || "chat";
-}
-
 export function downloadChatMarkdown(
   messages: ExportableMessage[],
   options: BuildChatMarkdownOptions = {},
@@ -81,13 +75,14 @@ export function downloadChatMarkdown(
   if (!messages.length) return;
   const markdown = buildChatMarkdown(messages, options);
   const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  const date = new Date().toISOString().slice(0, 10);
-  anchor.download = `${sanitizeFilename(options.title || "chat")}-${date}.md`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  // Delegate to the shared download helper: revoking the object URL
+  // synchronously after `click()` cancels the download in WebKit and Firefox.
+  triggerDownload(
+    blob,
+    `${sanitizeFilename(options.title || "chat")}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.md`,
+  );
 }
 
 // Re-export advanced multi-format export engines & types

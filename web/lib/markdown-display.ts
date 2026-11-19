@@ -144,7 +144,7 @@ const INLINE_CODE_SPAN_REGEX = /`[^`\n]*`/g;
 // delimiters — so prose currency like "$5 and $10" is not swallowed, while real
 // inline math ($x = [1, 5, 9]$) is protected from citation linkification.
 const MATH_SPAN_REGEX =
-  /\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\.|[^$\n])*?(?<!\s)\$/g;
+  /\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$(?!\s)(?:\\.|[^$\n])*?(?<!\s)\$(?!\d)/g;
 // ``**Label: **value`` — a label whose closing marker has whitespace just
 // inside it, which CommonMark does not read as strong emphasis, so the raw
 // asterisks stay on screen. Deliberately narrow: the capture must start at a
@@ -164,7 +164,7 @@ const RAW_HTML_CODE_BLOCK_CLOSE_REGEX = {
   code: /<\/code\s*>/i,
 } as const;
 const PROTECTED_SPAN_REGEX =
-  /```[\s\S]*?```|`[^`\n]*`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)(?:\\.|[^$\n])*?(?<!\s)\$/g;
+  /```[\s\S]*?```|`[^`\n]*`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$(?!\s)(?:\\.|[^$\n])*?(?<!\s)\$(?!\d)/g;
 const PROTECTED_PLACEHOLDER_REGEX = /\u0000PROTECTED_(\d+)\u0000/g;
 const HTML_ATTR_VALUE = /(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+)/.source;
 const HTML_EVENT_ATTR_REGEX = new RegExp(

@@ -262,18 +262,55 @@ class _StepFailed(RuntimeError):
     """An install step returned non-zero, or produced nothing usable."""
 
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _base_python() -> str:
+    """Interpreter used to create an app venv.
+
+    Resolved from the package root, never from the process working directory:
+    a launcher started elsewhere must not silently fall back to a different
+    interpreter. Mirrors the shared ``interpreter_path()`` intent.
+    """
+    if os.name == "nt":
+        candidate = _PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    else:
+        candidate = _PROJECT_ROOT / ".venv" / "bin" / "python"
+    if candidate.is_file():
+        return str(candidate)
+    return sys.executable
+
+
+def _usable_uv() -> str | None:
+    """Return a *working* uv path, or None to use the venv + pip plan.
+
+    A uv that exists but is broken (corrupt environment, unsupported Python)
+    must not become an install dead-end with no fallback.
+    """
+    uv_exe = shutil.which("uv")
+    if not uv_exe:
+        return None
+    try:
+        probe = subprocess.run(
+            [uv_exe, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=_clean_env(),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return uv_exe if probe.returncode == 0 else None
+
+
 def _steps(entry: CliAppEntry, env_dir) -> list[tuple[list[str], dict[str, str]]]:
     """The argv sequence that installs *entry*, and each step's environment."""
     plan = entry.install
     if plan.runtime is AppRuntime.PYTHON:
         base = _clean_env()
-        python_exe = sys.executable
-        if os.name == "nt":
-            venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe")
-            if os.path.isfile(venv_python):
-                python_exe = venv_python
+        python_exe = _base_python()
 
-        uv_exe = shutil.which("uv")
+        uv_exe = _usable_uv()
         if uv_exe:
             return [
                 ([uv_exe, "venv", str(env_dir), "--python", python_exe], base),

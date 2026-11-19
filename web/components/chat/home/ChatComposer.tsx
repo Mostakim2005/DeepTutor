@@ -1429,13 +1429,13 @@ export default memo(function ChatComposer({
           />
 
           {attachmentError && (
-            <div className="px-4 pb-2 text-[11px] text-red-600">
+            <div className="px-4 pb-2 text-[11px] text-red-600 dark:text-red-400">
               {attachmentError}
             </div>
           )}
 
           {recorder.error && (
-            <div role="alert" className="px-4 pb-2 text-[11px] text-red-600">
+            <div role="alert" className="px-4 pb-2 text-[11px] text-red-600 dark:text-red-400">
               {recorder.error}
             </div>
           )}
@@ -1644,7 +1644,7 @@ export default memo(function ChatComposer({
                     disabled={recorder.state === "transcribing" || isStreaming}
                     className={`group relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] transition-[background-color,color,transform] duration-150 active:scale-90 disabled:opacity-40 ${
                       recorder.state === "recording"
-                        ? "bg-red-500/15 text-red-500"
+                        ? "bg-red-500/15 text-red-600 dark:text-red-400"
                         : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]/55 hover:text-[var(--foreground)]"
                     }`}
                     aria-label={recorder.state === "recording" ? t("Stop recording") : t("Record voice")}

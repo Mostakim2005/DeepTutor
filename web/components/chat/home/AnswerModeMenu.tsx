@@ -159,7 +159,7 @@ function ModelPreferenceActions({
             e.stopPropagation();
             onTogglePin(name);
           }}
-          className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/15 transition-all text-muted-foreground/40 hover:text-amber-400"
+          className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/15 transition-all text-muted-foreground/40 hover:text-amber-600 dark:hover:text-amber-400"
           aria-label={isPinned ? t("Unpin model") : t("Pin model")}
         >
           <Star
@@ -167,7 +167,7 @@ function ModelPreferenceActions({
             strokeWidth={1.8}
             className={
               isPinned
-                ? "text-amber-400 fill-amber-400 filter drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]"
+                ? "text-amber-600 fill-amber-600 dark:text-amber-400 dark:fill-amber-400 filter drop-shadow-[0_0_6px_rgba(251,191,36,0.55)]"
                 : "transition-colors"
             }
           />
@@ -185,7 +185,7 @@ function ModelPreferenceActions({
           aria-label={isHidden ? t("Show model") : t("Hide model")}
         >
           {isHidden ? (
-            <EyeOff size={13} strokeWidth={1.8} className="text-rose-400 hover:text-rose-300 transition-colors" />
+            <EyeOff size={13} strokeWidth={1.8} className="text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 transition-colors" />
           ) : (
             <Eye size={13} strokeWidth={1.8} className="text-muted-foreground/50 hover:text-foreground transition-colors" />
           )}
@@ -358,7 +358,7 @@ function AnswerList({
                   <span className="flex items-center gap-1.5">
                     <span>{item.displayName || item.name}</span>
                     {item.isPinned && (
-                      <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" aria-label={t("Pinned")} />
+                      <Star size={11} className="text-amber-600 fill-amber-600 dark:text-amber-400 dark:fill-amber-400 shrink-0" aria-label={t("Pinned")} />
                     )}
                   </span>
                 }
@@ -619,7 +619,7 @@ function PartnerLinkList({
                       <span className="flex items-center gap-1.5">
                         <span>{item.displayName || item.name}</span>
                         {item.isPinned && (
-                          <Star size={11} className="text-amber-500 fill-amber-500 shrink-0" aria-label={t("Pinned")} />
+                          <Star size={11} className="text-amber-600 fill-amber-600 dark:text-amber-400 dark:fill-amber-400 shrink-0" aria-label={t("Pinned")} />
                         )}
                       </span>
                     }

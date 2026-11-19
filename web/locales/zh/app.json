@@ -6710,5 +6710,20 @@
   "Position": "位置",
   "Action": "操作",
   "Conversation IDs (optional)": "指定对话 ID（可选）",
-  "Leave empty to select all conversations. Separate IDs with commas; preview includes their dependencies. Export still includes the complete feature bundle.": "留空选择全部对话；多个 ID 用逗号分隔。预览包含关联依赖。导出仍包含完整功能数据。"
+  "Leave empty to select all conversations. Separate IDs with commas; preview includes their dependencies. Export still includes the complete feature bundle.": "留空选择全部对话；多个 ID 用逗号分隔。预览包含关联依赖。导出仍包含完整功能数据。",
+  "Microsoft Word": "Microsoft Word",
+  "Editable Word doc with OMML math equations, styled tables & code": "Editable Word doc with OMML math equations, styled tables & code",
+  "PDF Document": "PDF Document",
+  "Formatted document with headers, page numbers & clean typography": "Formatted document with headers, page numbers & clean typography",
+  "Excel Workbook": "Excel Workbook",
+  "Timeline log + dedicated spreadsheet tab for every table": "Timeline log + dedicated spreadsheet tab for every table",
+  "Web Page": "Web Page",
+  "Offline self-contained HTML page with light/dark theme & math": "Offline self-contained HTML page with light/dark theme & math",
+  "Markdown Note": "Markdown Note",
+  "Obsidian/GitHub ready note with YAML frontmatter & footnotes": "Obsidian/GitHub ready note with YAML frontmatter & footnotes",
+  "Structured JSON": "Structured JSON",
+  "Machine-readable full conversation and metadata archive": "Machine-readable full conversation and metadata archive",
+  "Plain Text": "Plain Text",
+  "Clean, distraction-free text transcript": "Clean, distraction-free text transcript",
+  "This conversation contains non-Latin text, so the vector print dialog opens instead of a downloaded file.": "This conversation contains non-Latin text, so the vector print dialog opens instead of a downloaded file."
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   FileText,
   FileSpreadsheet,
@@ -51,6 +51,14 @@ interface ExportChatModalProps {
   workspaceName?: string;
   sessionId?: string;
 }
+
+/**
+ * Scripts the jsPDF path cannot encode (its built-in fonts are Latin-1).
+ * Those exports fall back to the vector print path, which typesets with real
+ * fonts and stays searchable — better than a document full of tofu boxes.
+ */
+const NON_LATIN_SCRIPT =
+  /[\u0400-\u04FF\u0530-\u058F\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u0E00-\u0E7F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/;
 
 interface FormatDescriptor {
   id: ExportFormat;
@@ -136,6 +144,25 @@ export default function ExportChatModal({
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(() => {
     return new Set(normalizedList.map((m) => m.id));
   });
+
+  // The component stays mounted while closed, so a selection made in one
+  // conversation would otherwise leak into the next one and export nothing.
+  // Reseed only on the closed -> open transition, never on every render,
+  // otherwise the user could not deselect anything.
+  const wasOpen = useRef(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) {
+      wasOpen.current = false;
+      return;
+    }
+    if (wasOpen.current) return;
+    wasOpen.current = true;
+    setSelectedIds(new Set(normalizedList.map((m) => m.id)));
+    setLastClickedIndex(null);
+    setExpandedPreviewIds(new Set());
+    dialogRef.current?.focus();
+  }, [open, normalizedList]);
 
   // Track expanded message picker section
   const [showPicker, setShowPicker] = useState(true);
@@ -233,11 +260,11 @@ export default function ExportChatModal({
 
   // Individual / Shift+Click Range Selection Handler
   const handleToggleMessage = useCallback(
-    (index: number, id: string | number, event: React.MouseEvent) => {
+    (index: number, id: string | number, shiftKey: boolean) => {
       setSelectedIds((prev) => {
         const next = new Set(prev);
 
-        if (event.shiftKey && lastClickedIndex !== null) {
+        if (shiftKey && lastClickedIndex !== null) {
           // Range selection
           const start = Math.min(lastClickedIndex, index);
           const end = Math.max(lastClickedIndex, index);
@@ -306,6 +333,24 @@ export default function ExportChatModal({
         exportedAt: new Date(),
       };
       const effectiveOptions = getEffectiveOptions();
+
+      // jsPDF only encodes Latin-1; a CJK/Cyrillic/Arabic conversation would
+      // export as empty boxes. Use the vector print path instead.
+      const needsVectorPrint =
+        selectedFormat === "pdf" &&
+        normalizedList.some(
+          (message) => selectedIds.has(message.id) && NON_LATIN_SCRIPT.test(message.content),
+        );
+      if (needsVectorPrint) {
+        printPublicationPdf(messages, effectiveOptions, metadata);
+        notify(
+          t("This conversation contains non-Latin text, so the vector print dialog opens instead of a downloaded file."),
+          { tone: "success" },
+        );
+        onClose();
+        return;
+      }
+
       const result = await exportSession(
         messages,
         selectedFormat,
@@ -379,13 +424,27 @@ export default function ExportChatModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--popover)] p-6 text-[var(--foreground)] shadow-2xl overflow-hidden max-h-[92vh]"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="export-chat-title"
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            onClose();
+          }
+        }}
+        className="flex w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--popover)] p-6 text-[var(--foreground)] shadow-2xl overflow-hidden max-h-[92vh] outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] pb-4">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight flex items-center gap-2">
+            <h2
+              id="export-chat-title"
+              className="text-lg font-semibold tracking-tight flex items-center gap-2"
+            >
               <Download size={18} className="text-blue-500" />
               {t("Export Conversation")}
             </h2>
@@ -430,14 +489,14 @@ export default function ExportChatModal({
                           size={16}
                           className={isSelected ? "text-blue-500" : "text-[var(--muted-foreground)]"}
                         />
-                        <span className="text-xs font-semibold">{fmt.label}</span>
+                        <span className="text-xs font-semibold">{t(fmt.label)}</span>
                       </div>
                       <span className="text-[10px] font-mono opacity-60">
                         {fmt.ext}
                       </span>
                     </div>
                     <p className="text-[11px] text-[var(--muted-foreground)] line-clamp-2 leading-relaxed">
-                      {fmt.description}
+                      {t(fmt.description)}
                     </p>
                   </button>
                 );
@@ -448,8 +507,17 @@ export default function ExportChatModal({
           {/* Interactive Message Selection Panel */}
           <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-[var(--card)]">
             <div
-              className="flex items-center justify-between px-3.5 py-2.5 bg-[var(--muted)]/40 cursor-pointer hover:bg-[var(--muted)]/60 transition-colors select-none"
+              role="button"
+              tabIndex={0}
+              aria-expanded={showPicker}
+              className="flex w-full cursor-pointer items-center justify-between px-3.5 py-2.5 bg-[var(--muted)]/40 hover:bg-[var(--muted)]/60 transition-colors select-none text-left"
               onClick={() => setShowPicker((prev) => !prev)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setShowPicker((prev) => !prev);
+                }
+              }}
             >
               <div className="flex items-center gap-2">
                 <CheckSquare size={15} className="text-blue-500" />
@@ -534,15 +602,14 @@ export default function ExportChatModal({
                           <input
                             type="checkbox"
                             checked={isSelected}
-                            onClick={(e) => handleToggleMessage(index, m.id, e)}
-                            onChange={() => {}}
+                            onChange={() => handleToggleMessage(index, m.id, false)}
                             className="mt-0.5 rounded border-[var(--border)] text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
                           />
 
                           {/* Message Row Header */}
                           <div
                             className="flex-1 min-w-0 cursor-pointer"
-                            onClick={(e) => handleToggleMessage(index, m.id, e)}
+                            onClick={(e) => handleToggleMessage(index, m.id, e.shiftKey)}
                           >
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[10px] font-mono text-[var(--muted-foreground)]">
@@ -774,7 +841,7 @@ export default function ExportChatModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between border-t border-[var(--border)] pt-4 mt-2">
+        <div className="flex shrink-0 items-center justify-between border-t border-[var(--border)] pt-4 mt-2">
           <button
             type="button"
             onClick={handleCopy}

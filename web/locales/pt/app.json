@@ -6728,5 +6728,20 @@
   "Position": "Posição",
   "Action": "Ação",
   "Conversation IDs (optional)": "IDs das conversas (opcional)",
-  "Leave empty to select all conversations. Separate IDs with commas; preview includes their dependencies. Export still includes the complete feature bundle.": "Deixe em branco para selecionar todas as conversas. Separe os IDs por vírgulas; a prévia inclui suas dependências. A exportação continua incluindo o pacote completo de funcionalidades."
+  "Leave empty to select all conversations. Separate IDs with commas; preview includes their dependencies. Export still includes the complete feature bundle.": "Deixe em branco para selecionar todas as conversas. Separe os IDs por vírgulas; a prévia inclui suas dependências. A exportação continua incluindo o pacote completo de funcionalidades.",
+  "Microsoft Word": "Microsoft Word",
+  "Editable Word doc with OMML math equations, styled tables & code": "Editable Word doc with OMML math equations, styled tables & code",
+  "PDF Document": "PDF Document",
+  "Formatted document with headers, page numbers & clean typography": "Formatted document with headers, page numbers & clean typography",
+  "Excel Workbook": "Excel Workbook",
+  "Timeline log + dedicated spreadsheet tab for every table": "Timeline log + dedicated spreadsheet tab for every table",
+  "Web Page": "Web Page",
+  "Offline self-contained HTML page with light/dark theme & math": "Offline self-contained HTML page with light/dark theme & math",
+  "Markdown Note": "Markdown Note",
+  "Obsidian/GitHub ready note with YAML frontmatter & footnotes": "Obsidian/GitHub ready note with YAML frontmatter & footnotes",
+  "Structured JSON": "Structured JSON",
+  "Machine-readable full conversation and metadata archive": "Machine-readable full conversation and metadata archive",
+  "Plain Text": "Plain Text",
+  "Clean, distraction-free text transcript": "Clean, distraction-free text transcript",
+  "This conversation contains non-Latin text, so the vector print dialog opens instead of a downloaded file.": "This conversation contains non-Latin text, so the vector print dialog opens instead of a downloaded file."
 }

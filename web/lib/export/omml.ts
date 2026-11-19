@@ -60,6 +60,17 @@ function tag(node: Element): string {
   return node.localName.toLowerCase();
 }
 
+/** Depth of a MathML tree, capped so a degenerate input cannot be measured forever. */
+function treeDepth(node: Element, depth = 0): number {
+  if (depth > 80) return depth;
+  let deepest = depth;
+  for (const child of elements(node)) {
+    deepest = Math.max(deepest, treeDepth(child, depth + 1));
+    if (deepest > 80) break;
+  }
+  return deepest;
+}
+
 function textOf(node: Element): string {
   return (node.textContent ?? "").replace(INVISIBLE, "").trim();
 }
@@ -172,6 +183,47 @@ export function convert(node: Element): string {
     );
   }
 
+  // Accents and stacked limits. KaTeX emits `mover`/`munder`/`munderover` for
+  // \hat, \bar, \overline, \vec, \dot and for \lim/\sum limits. Without these
+  // the structure collapsed into bare children, so `x̂` exported as `x^`.
+  if (t === "mover" || t === "munder" || t === "munderover") {
+    const children = elements(node);
+    const base = children[0];
+    const accentNode = t === "munderover" ? children[2] : children[1];
+    const accentText = accentNode ? textOf(accentNode) : "";
+    const accent = ACCENTS[accentText] ?? (accentText.length === 1 ? accentText : null);
+    const isBar = accentText === "¯" || accentText === "‾" || accentText === "‾";
+    const baseXml = base ? convert(base) : "";
+
+    if (isBar && t === "mover") {
+      return `<m:bar><m:barPr><m:pos m:val="top"/></m:barPr><m:e>${baseXml}</m:e></m:bar>`;
+    }
+    if (isBar && t === "munder") {
+      return `<m:bar><m:barPr><m:pos m:val="bot"/></m:barPr><m:e>${baseXml}</m:e></m:bar>`;
+    }
+    if (accent && t === "mover") {
+      return `<m:acc><m:accPr><m:chr m:val="${xmlText(accent)}"/></m:accPr><m:e>${baseXml}</m:e></m:acc>`;
+    }
+
+    const lower =
+      t === "munder" || t === "munderover" ? children[1] : undefined;
+    const upper =
+      t === "mover" ? children[1] : t === "munderover" ? children[2] : undefined;
+
+    let stacked = `<m:e>${baseXml}</m:e>`;
+    if (upper) {
+      stacked = `<m:limUpp>${stacked}<m:lim>${convert(upper)}</m:lim></m:limUpp>`;
+    }
+    if (lower) {
+      stacked = `<m:limLow>${stacked}<m:lim>${convert(lower)}</m:lim></m:limLow>`;
+    }
+    return stacked;
+  }
+
+  if (t === "menclose") {
+    return elements(node).map(convert).join("");
+  }
+
   if (t === "mtable") {
     const rows = elements(node).filter((c) => tag(c) === "mtr");
     const ommlRows = rows
@@ -202,6 +254,9 @@ export function mathMlToOmml(mathMlString: string): string | null {
     const doc = parser.parseFromString(mathMlString, "application/xml");
     const root = doc.querySelector("math");
     if (!root) return null;
+    // A pathologically nested formula would overflow the stack; hand back null
+    // so the caller falls back to plain text instead of crashing the export.
+    if (treeDepth(root) > 60) return null;
     const inner = convert(root);
     return `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">${inner}</m:oMath>`;
   } catch {

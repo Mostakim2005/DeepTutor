@@ -89,30 +89,44 @@ export async function buildPdfBlob(
 
       // User Message Callout Card (Light blue tinted box with accent line)
       const promptLines = doc.splitTextToSize(msg.content.trim(), contentWidth - 10);
-      const cardHeight = promptLines.length * 4.2 + 9;
-      checkPageBreak(cardHeight + 4);
+      const promptLineHeight = 4.2;
+      const promptUsable = pageHeight - 2 * margin - 10;
+      const promptLinesPerPage = Math.max(
+        1,
+        Math.floor((promptUsable - 14) / promptLineHeight),
+      );
 
-      // Card background fill
-      doc.setFillColor(240, 246, 255);
-      doc.roundedRect(margin, y, contentWidth, cardHeight, 1.5, 1.5, "F");
+      // A prompt taller than one page must continue onto the next page. The
+      // previous single checkPageBreak drew the remainder past the page edge,
+      // where jsPDF discarded it without any error.
+      for (let start = 0; start < Math.max(promptLines.length, 1); start += promptLinesPerPage) {
+        const chunk = promptLines.slice(start, start + promptLinesPerPage);
+        const cardHeight = chunk.length * promptLineHeight + 9;
+        if (y + cardHeight + 4 > pageHeight - margin - 10) {
+          doc.addPage();
+          y = margin;
+        }
 
-      // Left blue accent border
-      doc.setDrawColor(9, 105, 218);
-      doc.setLineWidth(1.2);
-      doc.line(margin, y, margin, y + cardHeight);
+        doc.setFillColor(240, 246, 255);
+        doc.roundedRect(margin, y, contentWidth, cardHeight, 1.5, 1.5, "F");
 
-      // "YOU" Label
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(9, 105, 218);
-      doc.text("YOU", margin + 5, y + 4.5);
+        doc.setDrawColor(9, 105, 218);
+        doc.setLineWidth(1.2);
+        doc.line(margin, y, margin, y + cardHeight);
 
-      // User Prompt Text
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(31, 35, 40);
-      doc.text(promptLines, margin + 5, y + 9);
-      y += cardHeight + 6;
+        if (start === 0) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(7.5);
+          doc.setTextColor(9, 105, 218);
+          doc.text("YOU", margin + 5, y + 4.5);
+        }
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(31, 35, 40);
+        doc.text(chunk, margin + 5, y + 9);
+        y += cardHeight + 6;
+      }
     } else {
       // Assistant Response Header
       checkPageBreak(12);
@@ -222,27 +236,40 @@ export async function buildPdfBlob(
           const code = part.slice(firstLineEnd + 1, -3);
 
           const codeLines = doc.splitTextToSize(code, contentWidth - 10);
-          const blockHeight = codeLines.length * 3.6 + 8;
-          checkPageBreak(blockHeight + 4);
+          const lineHeight = 3.6;
+          const usable = pageHeight - 2 * margin - 10;
+          const linesPerPage = Math.max(1, Math.floor((usable - 12) / lineHeight));
 
-          // Card Background
-          doc.setFillColor(246, 248, 250);
-          doc.setDrawColor(208, 215, 222);
-          doc.setLineWidth(0.3);
-          doc.roundedRect(margin, y, contentWidth, blockHeight, 1.5, 1.5, "FD");
+          // Paginate the block itself. Previously one page break was added and
+          // the remaining lines were drawn off-page and silently lost.
+          for (let start = 0; start < Math.max(codeLines.length, 1); start += linesPerPage) {
+            const chunk = codeLines.slice(start, start + linesPerPage);
+            const isFirst = start === 0;
+            const blockHeight = chunk.length * lineHeight + (isFirst && lang ? 8 : 6);
 
-          if (lang) {
-            doc.setFont("courier", "bold");
-            doc.setFontSize(7.5);
-            doc.setTextColor(87, 96, 106);
-            doc.text(lang.toUpperCase(), margin + 4, y + 4.5);
+            if (y + blockHeight + 4 > pageHeight - margin - 10) {
+              doc.addPage();
+              y = margin;
+            }
+
+            doc.setFillColor(246, 248, 250);
+            doc.setDrawColor(208, 215, 222);
+            doc.setLineWidth(0.3);
+            doc.roundedRect(margin, y, contentWidth, blockHeight, 1.5, 1.5, "FD");
+
+            if (isFirst && lang) {
+              doc.setFont("courier", "bold");
+              doc.setFontSize(7.5);
+              doc.setTextColor(87, 96, 106);
+              doc.text(lang.toUpperCase(), margin + 4, y + 4.5);
+            }
+
+            doc.setFont("courier", "normal");
+            doc.setFontSize(7.8);
+            doc.setTextColor(36, 41, 47);
+            doc.text(chunk, margin + 4, y + (isFirst && lang ? 8.5 : 5.5));
+            y += blockHeight + 4;
           }
-
-          doc.setFont("courier", "normal");
-          doc.setFontSize(7.8);
-          doc.setTextColor(36, 41, 47);
-          doc.text(codeLines, margin + 4, y + (lang ? 8.5 : 5.5));
-          y += blockHeight + 4;
         } else if (part.trim()) {
           // Clean text paragraphs
           doc.setFont("helvetica", "normal");
@@ -303,6 +330,12 @@ export async function buildPdfBlob(
         });
 
         y = ((doc as any).lastAutoTable?.finalY ?? y) + 6;
+        // finalY is page-relative: a table that ends near the bottom would push
+        // the next block off-page.
+        if (y > pageHeight - margin - 10) {
+          doc.addPage();
+          y = margin;
+        }
       }
     }
 

@@ -2625,14 +2625,50 @@ async def get_usage_statistics(
 # ── Model Preferences ────────────────────────────────────────────────────────
 
 
+# Bound the preference document: it is a small settings file, not a store, and
+# an unbounded payload lets one request write megabytes to disk.
+_MAX_PREFERENCE_ENTRIES = 2000
+_MAX_PREFERENCE_NAME_CHARS = 200
+
+
 class ModelPreferencesPayload(BaseModel):
     display_names: dict[str, str] = Field(default_factory=dict)
     pinned: list[str] = Field(default_factory=list)
     hidden: list[str] = Field(default_factory=list)
 
+    @field_validator("display_names")
+    @classmethod
+    def _validate_display_names(cls, value: dict[str, str]) -> dict[str, str]:
+        if len(value) > _MAX_PREFERENCE_ENTRIES:
+            raise ValueError(f"at most {_MAX_PREFERENCE_ENTRIES} display names")
+        for key, name in value.items():
+            if not key.strip() or len(key) > _MAX_PREFERENCE_NAME_CHARS:
+                raise ValueError("display-name keys must be non-empty and short")
+            if len(name) > _MAX_PREFERENCE_NAME_CHARS:
+                raise ValueError("display names must be non-empty and short")
+        return value
+
+    @field_validator("pinned", "hidden")
+    @classmethod
+    def _validate_name_lists(cls, value: list[str]) -> list[str]:
+        if len(value) > _MAX_PREFERENCE_ENTRIES:
+            raise ValueError(f"at most {_MAX_PREFERENCE_ENTRIES} entries")
+        for name in value:
+            if not name.strip() or len(name) > _MAX_PREFERENCE_NAME_CHARS:
+                raise ValueError("entries must be non-empty and short")
+        return value
+
 
 class TogglePreferenceRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=_MAX_PREFERENCE_NAME_CHARS)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name must not be blank")
+        return cleaned
 
 
 @router.get("/model-preferences", response_model=ModelPreferencesPayload)
@@ -2646,11 +2682,17 @@ async def get_model_preferences():
 @router.put("/model-preferences", response_model=ModelPreferencesPayload)
 async def update_model_preferences(payload: ModelPreferencesPayload):
     """Save custom model display names, pinned models, and hidden models."""
-    from deeptutor.services.subagent.model_preferences import save_model_preferences
+    from deeptutor.services.subagent.model_preferences import (
+        load_model_preferences,
+        save_model_preferences,
+    )
 
-    data = payload.model_dump()
-    save_model_preferences(data)
-    return data
+    # Merge over the current document rather than replacing it: a full replace
+    # silently drops a pin or hide toggled by another tab while this request
+    # was in flight.
+    merged = {**load_model_preferences(), **payload.model_dump(exclude_unset=True)}
+    merged = await asyncio.to_thread(save_model_preferences, merged)
+    return load_model_preferences()
 
 
 @router.post("/model-preferences/toggle-pin")
@@ -2658,7 +2700,7 @@ async def toggle_model_pin(payload: TogglePreferenceRequest):
     """Toggle whether a model or subagent is pinned."""
     from deeptutor.services.subagent.model_preferences import toggle_pin
 
-    is_active = toggle_pin(payload.name)
+    is_active = await asyncio.to_thread(toggle_pin, payload.name)
     return {"name": payload.name, "is_pinned": is_active}
 
 
@@ -2667,6 +2709,6 @@ async def toggle_model_hide(payload: TogglePreferenceRequest):
     """Toggle whether a model or subagent is hidden."""
     from deeptutor.services.subagent.model_preferences import toggle_hide
 
-    is_active = toggle_hide(payload.name)
+    is_active = await asyncio.to_thread(toggle_hide, payload.name)
     return {"name": payload.name, "is_hidden": is_active}
 

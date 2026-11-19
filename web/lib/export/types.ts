@@ -30,6 +30,26 @@ export interface ExportFilterOptions {
   selectedMessageIds?: Array<string | number>;
 }
 
+/**
+ * One set of truncation limits for every builder. Each format used to invent
+ * its own caps, so the same conversation exported different amounts of text
+ * depending on the file type.
+ */
+export const EXPORT_LIMITS = {
+  /** Longest tool result rendered per call. */
+  toolResult: 4000,
+  /** Longest artifact body inlined into a document. */
+  artifactText: 3000,
+  /** Longest single citation snippet kept. */
+  sourceSnippet: 500,
+} as const;
+
+/**
+ * Upper bound on total characters handed to one export. Beyond this the tab
+ * can run out of memory while several full copies of the document exist.
+ */
+export const MAX_EXPORT_CHARS = 8_000_000;
+
 export const DEFAULT_EXPORT_FILTER_OPTIONS: ExportFilterOptions = {
   includeUserPrompts: true,
   includeThinking: true,
