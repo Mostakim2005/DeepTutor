@@ -682,6 +682,8 @@ def _owned_orphan_started_at(
         if supervisor <= 0 or _is_pid_alive(supervisor):
             return None
         if role == "start.backend":
+            # Intentional fork deviation: macOS framework-Python detection is not
+            # used; Windows keeps the shared _python_interpreter() path.
             # Multiprocess uvicorn workers have spawn command lines; their
             # parent carries the exact application command and interpreter.
             for candidate in [process, *process.parents()]:
@@ -1697,6 +1699,11 @@ def start(
         "-m",
         "uvicorn",
         "deeptutor.api.main:app",
+        # Uvicorn adds its app-dir to sys.path even with PYTHONSAFEPATH=1.
+        # The runtime home may contain stale source files after an upgrade;
+        # import the backend from the same installation as this launcher.
+        "--app-dir",
+        str(PACKAGE_ROOT),
         "--host",
         "0.0.0.0",
         "--port",
