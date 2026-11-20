@@ -2635,17 +2635,18 @@ class ModelPreferencesPayload(BaseModel):
     display_names: dict[str, str] = Field(default_factory=dict)
     pinned: list[str] = Field(default_factory=list)
     hidden: list[str] = Field(default_factory=list)
+    unavailable: dict[str, str] = Field(default_factory=dict)
 
-    @field_validator("display_names")
+    @field_validator("display_names", "unavailable")
     @classmethod
-    def _validate_display_names(cls, value: dict[str, str]) -> dict[str, str]:
+    def _validate_string_maps(cls, value: dict[str, str]) -> dict[str, str]:
         if len(value) > _MAX_PREFERENCE_ENTRIES:
-            raise ValueError(f"at most {_MAX_PREFERENCE_ENTRIES} display names")
+            raise ValueError(f"at most {_MAX_PREFERENCE_ENTRIES} entries")
         for key, name in value.items():
             if not key.strip() or len(key) > _MAX_PREFERENCE_NAME_CHARS:
-                raise ValueError("display-name keys must be non-empty and short")
+                raise ValueError("keys must be non-empty and short")
             if len(name) > _MAX_PREFERENCE_NAME_CHARS:
-                raise ValueError("display names must be non-empty and short")
+                raise ValueError("values must be short")
         return value
 
     @field_validator("pinned", "hidden")
@@ -2671,9 +2672,18 @@ class TogglePreferenceRequest(BaseModel):
         return cleaned
 
 
+class UnavailablePreferenceRequest(TogglePreferenceRequest):
+    reason: str = Field(default="Unavailable on current plan", max_length=_MAX_PREFERENCE_NAME_CHARS)
+
+
+class ImportPreferencesRequest(BaseModel):
+    preferences: ModelPreferencesPayload
+    merge: bool = True
+
+
 @router.get("/model-preferences", response_model=ModelPreferencesPayload)
 async def get_model_preferences():
-    """Retrieve custom model display names, pinned models, and hidden models."""
+    """Retrieve custom model display names, pinned, hidden, and unavailable models."""
     from deeptutor.services.subagent.model_preferences import load_model_preferences
 
     return load_model_preferences()
@@ -2681,7 +2691,7 @@ async def get_model_preferences():
 
 @router.put("/model-preferences", response_model=ModelPreferencesPayload)
 async def update_model_preferences(payload: ModelPreferencesPayload):
-    """Save custom model display names, pinned models, and hidden models."""
+    """Save custom model display names, pinned, hidden, and unavailable models."""
     from deeptutor.services.subagent.model_preferences import (
         load_model_preferences,
         save_model_preferences,
@@ -2691,7 +2701,7 @@ async def update_model_preferences(payload: ModelPreferencesPayload):
     # silently drops a pin or hide toggled by another tab while this request
     # was in flight.
     merged = {**load_model_preferences(), **payload.model_dump(exclude_unset=True)}
-    merged = await asyncio.to_thread(save_model_preferences, merged)
+    await asyncio.to_thread(save_model_preferences, merged)
     return load_model_preferences()
 
 
@@ -2711,4 +2721,74 @@ async def toggle_model_hide(payload: TogglePreferenceRequest):
 
     is_active = await asyncio.to_thread(toggle_hide, payload.name)
     return {"name": payload.name, "is_hidden": is_active}
+
+
+@router.get("/model-preferences/export")
+async def export_model_preferences():
+    """Export model preferences as a portable versioned JSON bundle."""
+    from deeptutor.services.subagent.model_preferences import export_preferences_bundle
+
+    return await asyncio.to_thread(export_preferences_bundle)
+
+
+@router.post("/model-preferences/import", response_model=ModelPreferencesPayload)
+async def import_model_preferences(payload: ImportPreferencesRequest):
+    """Import a model preferences bundle (merge by default, or full replace)."""
+    from deeptutor.services.subagent.model_preferences import import_preferences_bundle
+
+    return await asyncio.to_thread(
+        import_preferences_bundle,
+        {"preferences": payload.preferences.model_dump()},
+        merge=payload.merge,
+    )
+
+
+@router.get("/model-preferences/stale")
+async def get_stale_model_preferences():
+    """Detect orphaned model preference entries not present in the active catalog."""
+    from deeptutor.services.subagent.model_preferences import (
+        collect_known_model_names,
+        find_stale_preferences,
+    )
+
+    known = await asyncio.to_thread(collect_known_model_names)
+    stale = await asyncio.to_thread(find_stale_preferences, known)
+    total = sum(len(items) for items in stale.values())
+    return {"stale": stale, "total": total, "known_count": len(known)}
+
+
+@router.post("/model-preferences/prune")
+async def prune_stale_model_preferences():
+    """Prune orphaned model preference entries not present in the active catalog."""
+    from deeptutor.services.subagent.model_preferences import (
+        collect_known_model_names,
+        load_model_preferences,
+        prune_unknown,
+    )
+
+    known = await asyncio.to_thread(collect_known_model_names)
+    removed = await asyncio.to_thread(prune_unknown, known)
+    return {
+        "removed": removed,
+        "total_removed": sum(removed.values()),
+        "preferences": load_model_preferences(),
+    }
+
+
+@router.post("/model-preferences/mark-unavailable", response_model=ModelPreferencesPayload)
+async def mark_model_unavailable(payload: UnavailablePreferenceRequest):
+    """Flag a model as unavailable (for example, rejected by the user's current plan)."""
+    from deeptutor.services.subagent.model_preferences import mark_unavailable
+
+    return await asyncio.to_thread(mark_unavailable, payload.name, payload.reason)
+
+
+@router.post("/model-preferences/clear-unavailable")
+async def clear_model_unavailable(payload: TogglePreferenceRequest):
+    """Clear an unavailable flag from a model."""
+    from deeptutor.services.subagent.model_preferences import clear_unavailable
+
+    cleared = await asyncio.to_thread(clear_unavailable, payload.name)
+    return {"name": payload.name, "cleared": cleared}
+
 

@@ -61,14 +61,14 @@
   * `web/lib/latex-normalize.ts` -> `wrapBareEnvironments`
   * `web/lib/latex.ts` -> LaTeX rendering entry
 
-### [FEATURE: Model Preferences, Pinning & Hiding] | Aliases: star model, hide model, model catalog, friendly names, model picker
-> **1-Line Summary:** The model picker shows human-friendly names, lets the learner star favorites to the top, and hides unused models in a collapsible drawer.
-* **User Intention (Non-Negotiable):** Preferences are human-editable, persist across restarts and upstream updates, and never require editing source code.
-* **Visual / UI Behavior:** A glowing star pins a model; an eye toggle hides it; hidden models remain reachable under a "hidden" drawer.
+### [FEATURE: Model Preferences, Pinning & Hiding] | Aliases: star model, hide model, model catalog, friendly names, model picker, L-06, prune stale, unavailable model
+> **1-Line Summary:** The model picker shows human-friendly names, lets the learner star favorites, hide unused models, flag plan-unavailable models, export/import preferences, and prune stale entries.
+* **User Intention (Non-Negotiable):** Preferences are human-editable, portable across machines, persist across restarts and upstream updates, and never require editing source code.
+* **Visual / UI Behavior:** A glowing star pins a model; an eye toggle hides it; hidden models remain reachable under a "hidden" drawer; stale or plan-unavailable models can be flagged and pruned cleanly.
 * **Code Anchors (Grep Targets):**
   * `data/user/settings/model_preferences.json` -> preference source of truth
-  * `deeptutor/services/subagent/model_preferences.py` -> `load_model_preferences`
-  * `deeptutor/api/routers/settings.py` -> `/model-preferences`, `/toggle-pin`, `/toggle-hide`
+  * `deeptutor/services/subagent/model_preferences.py` -> `load_model_preferences`, `export_preferences_bundle`, `import_preferences_bundle`, `find_stale_preferences`, `prune_unknown`, `mark_unavailable`, `clear_unavailable`
+  * `deeptutor/api/routers/settings.py` -> `/model-preferences`, `/toggle-pin`, `/toggle-hide`, `/export`, `/import`, `/stale`, `/prune`, `/mark-unavailable`, `/clear-unavailable`
   * `web/components/chat/home/AnswerModeMenu.tsx` -> `ModelPreferenceActions`
 
 ### [FEATURE: Cross-Provider Reasoning Effort Normalisation] | Aliases: reasoning effort, thinking level, Gemini 400, minimal effort, effort badges
