@@ -80,13 +80,13 @@
   * `deeptutor/services/llm/reasoning_params.py` -> `_MINIMAL_NOT_OFF_PATTERNS`
   * `deeptutor/services/subagent/command_code.py` -> `_EFFORT_ALIASES`, `_build_command`
 
-### [FEATURE: Windows Desktop Scripts & Model Catalog Setup] | Aliases: start.bat, stop.bat, configure-ai, provider keys, DEEPTUTOR_HOME
-> **1-Line Summary:** Single-click PowerShell/Batch launchers start, stop and configure the app, and one script writes provider slots into the model catalog.
-* **User Intention (Non-Negotiable):** A Windows user can run the app without touching a terminal twice, and provider credentials are written where the runtime reads them.
-* **Visual / UI Behavior:** Not a UI surface; it protects first-run setup.
+### [FEATURE: Windows Desktop Scripts & Model Catalog Setup] | Aliases: start.bat, stop.bat, configure-ai, provider keys, DEEPTUTOR_HOME, Bravo 1, live models
+> **1-Line Summary:** Single-click PowerShell/Batch launchers start, stop, and configure the app, while the upgraded `configure_ai.py` wizard manages custom API providers (with live `/models` discovery), multi-model profiles, CLI harnesses, and preference pruning.
+* **User Intention (Non-Negotiable):** A Windows user can run and configure the app without editing source code, and all provider credentials, custom harnesses, and model lists are stored under `data/user/settings/`.
+* **Visual / UI Behavior:** Interactive terminal wizard for API providers, OAuth subscriptions, CLI harnesses (`agy`, `cmdc`, `opencode`, `dsh`, `freebuff`), and `L-06` preference portability.
 * **Code Anchors (Grep Targets):**
   * `start.ps1`, `stop.ps1`, `configure-ai.ps1` -> PowerShell entry points
-  * `scripts/configure_ai.py` -> `main`, provider slot enumeration
+  * `scripts/configure_ai.py` -> `main`, `configure_custom`, `discover_openai_compatible_models`, `manage_llm_profiles`, `manage_cli_harnesses`, `manage_preferences`
 
 ### [FEATURE: Subagent Model Catalog & Composer Badges] | Aliases: Antigravity models, effort tier, model pill, friendly label, Bravo 4, custom model catalog, effort fallback
 > **1-Line Summary:** Each subagent backend publishes its live model catalog with user-owned JSON add/retire overrides and safe effort-level fallback, while the composer renders friendly labels and reasoning badges.
