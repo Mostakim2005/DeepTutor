@@ -33,18 +33,22 @@ export function copyToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 function getDosDateTime(date: Date): { time: number; day: number } {
-  const year = Math.max(1980, date.getFullYear());
+  const year = Math.max(1980, date.getUTCFullYear());
   const time =
-    (date.getHours() << 11) |
-    (date.getMinutes() << 5) |
-    Math.floor(date.getSeconds() / 2);
+    (date.getUTCHours() << 11) |
+    (date.getUTCMinutes() << 5) |
+    Math.floor(date.getUTCSeconds() / 2);
   const day =
-    ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+    ((year - 1980) << 9) | ((date.getUTCMonth() + 1) << 5) | date.getUTCDate();
 
   return { time, day };
 }
 
-export function createZipBlob(entries: ZipEntry[], mimeType = "application/zip"): Blob {
+export function createZipBlob(
+  entries: ZipEntry[],
+  mimeType = "application/zip",
+  timestamp: Date = new Date(),
+): Blob {
   if (entries.length === 0 || entries.length > 0xffff) {
     throw new Error("Invalid number of files for ZIP archive.");
   }
@@ -52,7 +56,7 @@ export function createZipBlob(entries: ZipEntry[], mimeType = "application/zip")
   const encoder = new TextEncoder();
   const localParts: ArrayBuffer[] = [];
   const centralParts: ArrayBuffer[] = [];
-  const { time, day } = getDosDateTime(new Date());
+  const { time, day } = getDosDateTime(timestamp);
   let localOffset = 0;
   let centralSize = 0;
 

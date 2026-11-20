@@ -309,5 +309,5 @@ export async function buildXlsxBlob(
     });
   });
 
-  return createZipBlob(entries, XLSX_MIME_TYPE);
+  return createZipBlob(entries, XLSX_MIME_TYPE, metadata.exportedAt);
 }

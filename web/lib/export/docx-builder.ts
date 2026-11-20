@@ -454,5 +454,6 @@ export async function buildDocxBlob(
   return createZipBlob(
     entries,
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    metadata.exportedAt,
   );
 }

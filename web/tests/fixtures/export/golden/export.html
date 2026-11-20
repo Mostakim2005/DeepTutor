@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Deterministic Export Fixture</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.27/dist/katex.min.css"/>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #1f2328;
+      --muted: #57606a;
+      --border: #d0d7de;
+      --soft: #f6f8fa;
+      --user-bg: #f0f6ff;
+      --user-border: #c8d9ff;
+      --user-accent: #0969da;
+      --assistant-accent: #1f2328;
+      --code-bg: #f6f8fa;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --text: #e6edf3;
+        --muted: #8d96a0;
+        --border: #30363d;
+        --soft: #161b22;
+        --user-bg: #13233a;
+        --user-border: #1f3a64;
+        --user-accent: #58a6ff;
+        --assistant-accent: #e6edf3;
+        --code-bg: #161b22;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2.5rem 2rem;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Arabic", "Noto Sans CJK SC", "Noto Sans Devanagari", "Noto Sans Bengali", Helvetica, Arial, sans-serif;
+      font-size: 14.5px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1.doc-title { margin: 0 0 0.5rem 0; font-size: 2rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+    .meta { color: var(--muted); font-size: 0.85rem; }
+    
+    .message {
+      margin-bottom: 2.5rem;
+      padding: 1.25rem 1.5rem;
+      border-radius: 12px;
+      background: var(--bg);
+    }
+    .message.role-user {
+      background: var(--user-bg);
+      border-left: 4px solid var(--user-accent);
+      border-radius: 4px 12px 12px 4px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .message.role-assistant {
+      background: transparent;
+      padding: 0.5rem 0 2rem 0;
+      border-bottom: 1px solid var(--border);
+      border-radius: 0;
+    }
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+    }
+    .role-user .speaker { color: var(--user-accent); font-weight: 800; }
+    .role-assistant .speaker { color: var(--assistant-accent); font-weight: 800; }
+    
+    .badge {
+      font-size: 0.72rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: var(--soft);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-weight: 500;
+      letter-spacing: normal;
+    }
+    details {
+      margin: 1rem 0;
+      padding: 0.6rem 0.9rem;
+      border-radius: 8px;
+      background: var(--soft);
+      border: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--muted);
+      user-select: none;
+    }
+    .thinking-card { border-left: 3px solid #8250df; }
+    .tool-card { border-left: 3px solid var(--user-accent); }
+    
+    .code-block {
+      margin: 1.25rem 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--code-bg);
+      break-inside: avoid;
+    }
+    .code-header {
+      padding: 0.35rem 0.75rem;
+      background: #eaeef2;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #57606a;
+      border-bottom: 1px solid var(--border);
+    }
+    @media (prefers-color-scheme: dark) {
+      .code-header { background: #21262d; color: #8b949e; }
+    }
+    pre {
+      margin: 0;
+      padding: 0.9rem 1rem;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.86rem;
+      line-height: 1.5;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      background: var(--soft);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.88em;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
+    
+    .math-display {
+      margin: 1.25rem 0;
+      overflow-x: auto;
+      padding: 0.5rem 0;
+      text-align: center;
+      break-inside: avoid;
+    }
+    .math-inline {
+      padding: 0 0.15em;
+    }
+    
+    .table-container {
+      margin: 1.25rem 0;
+      overflow-x: auto;
+      break-inside: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.85rem;
+    }
+    th {
+      background: var(--soft);
+      font-weight: 600;
+      color: var(--text);
+    }
+    tbody tr:nth-child(even) {
+      background: rgba(0, 0, 0, 0.015);
+    }
+    
+    h1, h2, h3, h4, h5, h6 {
+      color: var(--text);
+      font-weight: 600;
+      margin-top: 1.75rem;
+      margin-bottom: 0.75rem;
+      line-height: 1.3;
+      break-after: avoid;
+    }
+    h1 { font-size: 1.6rem; }
+    h2 { font-size: 1.35rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    h3 { font-size: 1.15rem; }
+    h4 { font-size: 1rem; }
+    
+    p { margin: 0.85rem 0; }
+    ul, ol { margin: 0.85rem 0; padding-left: 1.6rem; }
+    li { margin: 0.3rem 0; }
+    li.task-item { list-style-type: none; margin-left: -1.2rem; }
+    
+    blockquote {
+      margin: 1.25rem 0;
+      padding: 0.5rem 1rem;
+      border-left: 3.5px solid #0969da;
+      background: var(--soft);
+      color: var(--muted);
+      border-radius: 0 6px 6px 0;
+    }
+    a { color: #0969da; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    
+    .toc-card {
+      margin-bottom: 2rem;
+      padding: 1rem 1.25rem;
+      border-radius: 10px;
+      background: var(--soft);
+      border: 1px solid var(--border);
+    }
+    .toc-card summary { font-size: 1rem; font-weight: 600; cursor: pointer; color: var(--text); }
+    .toc-list { margin: 0.75rem 0 0.25rem 0; padding-left: 1.25rem; list-style-type: decimal; }
+    .toc-list li { margin-bottom: 0.35rem; font-size: 0.88rem; }
+    
+    /* Publication Paged Media Styles */
+    @page {
+      size: A4;
+      margin: 16mm 14mm 18mm 14mm;
+      @bottom-right {
+        content: counter(page) " / " counter(pages);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #656d76;
+      }
+    }
+    @media print {
+      body {
+        padding: 0;
+        background: #ffffff !important;
+        color: #1f2328 !important;
+        font-size: 10pt;
+      }
+      .container { max-width: 100%; }
+      header { margin-bottom: 1.25rem; padding-bottom: 0.75rem; }
+      .message.role-user {
+        background: #f0f6ff !important;
+        border-left: 4px solid #0969da !important;
+        padding: 10pt 12pt;
+        break-inside: avoid;
+      }
+      .message.role-assistant {
+        background: transparent !important;
+        border-bottom: 1px solid #d0d7de !important;
+        padding: 6pt 0 16pt 0;
+      }
+      thead { display: table-header-group !important; }
+      tr { break-inside: avoid !important; }
+      pre, .code-block, .math-display, blockquote, .toc-card {
+        break-inside: avoid !important;
+      }
+      h1, h2, h3, h4 { break-after: avoid !important; }
+      details { border: 1px solid #d0d7de !important; }
+      details[open] summary ~ * { display: block !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1 class="doc-title">Deterministic Export Fixture</h1>
+      <div class="meta">2026-01-15T12:00:00.000Z</div>
+    </header>
+    <main>
+      
+      <details class="toc-card" open>
+        <summary>Table of Contents (1 questions)</summary>
+        <ol class="toc-list">
+          <li><a href="#turn-1"><strong>Q1:</strong> Compare the accented operators, provide a Python norm-squared snippet, and …</a></li>
+        </ol>
+      </details>
+      
+      <div id="turn-1" class="message role-user"><div class="message-header"><span class="speaker user-pill">YOU</span></div><div class="message-body"><p>Compare the accented operators, provide a Python norm-squared snippet, and summarize in Japanese.</p></div></div>
+<div id="turn-2" class="message role-assistant"><div class="message-header"><span class="speaker assistant-pill">DEEPTUTOR</span><span class="badge model-pill">deepseek-r1</span><span class="badge capability">deep_solve</span></div>
+        <details class="thinking-card" open>
+          <summary>Reasoning &amp; Chain of Thought</summary>
+          <div class="thinking-body"><p>Verify the operator notation, accent symbols, and table formatting.</p></div>
+        </details>
+      
+          <details class="tool-card">
+            <summary>Tool Execution: <code>paper_search</code></summary>
+            <div class="tool-body">
+              <pre><code>{
+  &quot;query&quot;: &quot;spectral operator&quot;
+}</code></pre>
+              <div class="tool-result-label">Result:</div><pre class="tool-result"><code>Found 1 canonical reference.</code></pre>
+            </div>
+          </details>
+        <div class="message-body"><p>Using the accented relation <span class="math-inline"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent="true"><mi>x</mi><mo>^</mo></mover><mo>=</mo><mover accent="true"><mi>v</mi><mo>⃗</mo></mover><mo>+</mo><mover accent="true"><mi>α</mi><mo>~</mo></mover></mrow><annotation encoding="application/x-tex">\hat{x} = \vec{v} + \tilde{\alpha}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal">x</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2222em;"><span class="mord">^</span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7973em;vertical-align:-0.0833em;"></span><span class="mord accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.714em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">v</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2077em;"><span class="overlay" style="height:0.714em;width:0.471em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.471em" height="0.714em" style="width:0.471em" viewBox="0 0 471 714" preserveAspectRatio="xMinYMin"><path d="M377 20c0-5.333 1.833-10 5.5-14S391 0 397 0c4.667 0 8.667 1.667 12 5
+3.333 2.667 6.667 9 10 19 6.667 24.667 20.333 43.667 41 57 7.333 4.667 11
+10.667 11 18 0 6-1 10-3 12s-6.667 5-14 9c-28.667 14.667-53.667 35.667-75 63
+-1.333 1.333-3.167 3.5-5.5 6.5s-4 4.833-5 5.5c-1 .667-2.5 1.333-4.5 2s-4.333 1
+-7 1c-4.667 0-9.167-1.833-13.5-5.5S337 184 337 178c0-12.667 15.667-32.333 47-59
+H213l-171-1c-8.667-6-13-12.333-13-19 0-4.667 4.333-11.333 13-20h359
+c-16-25.333-24-45-24-59z"/></svg></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6679em;"></span><span class="mord accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6679em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0037em;">α</span></span><span style="top:-3.35em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2222em;"><span class="mord">~</span></span></span></span></span></span></span></span></span></span></span>, the stationary equation is:</p>
+<p><div class="math-display"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mover accent="true"><mi>H</mi><mo>^</mo></mover><mi>ψ</mi><mo>=</mo><mi>E</mi><mi>ψ</mi></mrow><annotation encoding="application/x-tex">\hat{H}\psi = E\psi</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.1412em;vertical-align:-0.1944em;"></span><span class="mord accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.9468em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.08125em;">H</span></span><span style="top:-3.2523em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.03588em;">ψ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.05764em;">E</span><span class="mord mathnormal" style="margin-right:0.03588em;">ψ</span></span></span></span></span></div></p>
+<p><div class="code-block"><div class="code-header">PYTHON</div><pre><code>def norm_sq(a: float, b: float) -&gt; float:
+    return a * a + b * b</code></pre></div></p>
+<p>勾股定理（ピタゴラスの定理）：直角三角形の斜辺の二乗は他の二辺の二乗の和に等しい。</p></div><div class="table-container"><table><thead><tr><th>Metric</th><th>Estimate</th><th>Count</th></tr></thead><tbody><tr><td>FIXTURE_METRIC_ALPHA</td><td>3.14</td><td>42</td></tr><tr><td>FIXTURE_METRIC_BETA</td><td>2.71</td><td>7</td></tr></tbody></table></div><div class="sources-list"><h5>Sources &amp; Citations</h5><ol><li><a href="https://example.org/spectral-theory" target="_blank" rel="noopener noreferrer">Spectral Theory Reference</a></li></ol></div><div class="artifacts-list"><h5>Attached Artifacts</h5><ul><li><strong>proof-notes.txt</strong> <code>(text/plain)</code><pre><code>Lemma 1: Self-adjoint operators have real eigenvalues.</code></pre></li></ul></div></div>
+    </main>
+  </div>
+</body>
+</html>

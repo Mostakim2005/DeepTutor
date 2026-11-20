@@ -58,7 +58,7 @@ export async function exportSession(
   }
   assertExportSize(messages);
   const baseName = sanitizeFilename(metadata.title || "conversation");
-  const dateStr = new Date().toISOString().slice(0, 10);
+  const dateStr = (metadata.exportedAt ?? new Date()).toISOString().slice(0, 10);
 
   switch (format) {
     case "docx": {

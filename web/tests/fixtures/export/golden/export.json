@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "title": "Deterministic Export Fixture",
+    "exportedAt": "2026-01-15T12:00:00.000Z",
+    "workspaceId": "ws-stem",
+    "workspaceName": "STEM Workspace"
+  },
+  "messages": [
+    {
+      "id": "u1",
+      "role": "user",
+      "content": "Compare the accented operators, provide a Python norm-squared snippet, and summarize in Japanese.",
+      "timestamp": 1768478100000
+    },
+    {
+      "id": "a1",
+      "role": "assistant",
+      "content": "Using the accented relation $\\hat{x} = \\vec{v} + \\tilde{\\alpha}$, the stationary equation is:\n\n$$\\hat{H}\\psi = E\\psi$$\n\n```python\ndef norm_sq(a: float, b: float) -> float:\n    return a * a + b * b\n```\n\n\n勾股定理（ピタゴラスの定理）：直角三角形の斜辺の二乗は他の二辺の二乗の和に等しい。",
+      "timestamp": 1768478200000,
+      "capability": "deep_solve",
+      "model": "deepseek-r1",
+      "thinking": "Verify the operator notation, accent symbols, and table formatting.",
+      "toolCalls": [
+        {
+          "name": "paper_search",
+          "args": {
+            "query": "spectral operator"
+          },
+          "result": "Found 1 canonical reference."
+        }
+      ],
+      "sources": [
+        {
+          "index": 1,
+          "title": "Spectral Theory Reference",
+          "url": "https://example.org/spectral-theory",
+          "snippet": "Core operator identities."
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "note",
+          "filename": "proof-notes.txt",
+          "mime_type": "text/plain",
+          "content": "Lemma 1: Self-adjoint operators have real eigenvalues."
+        }
+      ],
+      "tables": [
+        {
+          "headers": [
+            "Metric",
+            "Estimate",
+            "Count"
+          ],
+          "rows": [
+            [
+              "FIXTURE_METRIC_ALPHA",
+              "3.14",
+              "42"
+            ],
+            [
+              "FIXTURE_METRIC_BETA",
+              "2.71",
+              "7"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

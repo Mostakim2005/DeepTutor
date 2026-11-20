@@ -1,0 +1,30 @@
+{
+  "docx": {
+    "sha256": "0be972367734d264ca254df189e9a975250311e7ec1f507149619c52e72b9ea8",
+    "bytes": 24757,
+    "entries": [
+      "[Content_Types].xml",
+      "_rels/.rels",
+      "word/_rels/document.xml.rels",
+      "word/styles.xml",
+      "word/document.xml"
+    ]
+  },
+  "xlsx": {
+    "sha256": "5f5dc180ab5e3b3b5c9919654275d50189cadebf58c028638588d1cc947c556d",
+    "bytes": 7895,
+    "entries": [
+      "[Content_Types].xml",
+      "_rels/.rels",
+      "xl/_rels/workbook.xml.rels",
+      "xl/styles.xml",
+      "xl/workbook.xml",
+      "xl/worksheets/sheet1.xml",
+      "xl/worksheets/sheet2.xml"
+    ]
+  },
+  "pdf": {
+    "normalizedSha256": "fe21d7333dcd48eb31ea0c4ed0645e30d3573cbd2467abb0aa87b4fae98a6835",
+    "bytes": 11478
+  }
+}
