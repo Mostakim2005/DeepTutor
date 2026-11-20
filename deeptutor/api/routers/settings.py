@@ -2792,3 +2792,57 @@ async def clear_model_unavailable(payload: TogglePreferenceRequest):
     return {"name": payload.name, "cleared": cleared}
 
 
+# ── Custom Per-Harness Model Catalog Overrides (Bravo 4) ─────────────────────
+
+
+class CustomCatalogModelRequest(BaseModel):
+    slug: str = Field(min_length=1, max_length=_MAX_PREFERENCE_NAME_CHARS)
+    display_name: str = Field(default="", max_length=_MAX_PREFERENCE_NAME_CHARS)
+    default_effort: str = Field(default="", max_length=32)
+    efforts: list[str] = Field(default_factory=list)
+
+
+class CustomCatalogSlugRequest(BaseModel):
+    slug: str = Field(min_length=1, max_length=_MAX_PREFERENCE_NAME_CHARS)
+
+
+@router.get("/model-catalog-overrides")
+async def get_model_catalog_overrides():
+    """Return user-owned per-harness added and retired model catalog overrides."""
+    from deeptutor.services.subagent.custom_catalog import load_custom_catalogs
+
+    return await asyncio.to_thread(load_custom_catalogs)
+
+
+@router.post("/model-catalog-overrides/{kind}/add-model")
+async def add_model_catalog_override(kind: str, payload: CustomCatalogModelRequest):
+    """Add or update a user-defined model entry for a specific harness kind."""
+    from deeptutor.services.subagent.custom_catalog import add_custom_model
+
+    return await asyncio.to_thread(
+        add_custom_model,
+        kind,
+        payload.slug,
+        payload.display_name,
+        default_effort=payload.default_effort,
+        efforts=payload.efforts,
+    )
+
+
+@router.post("/model-catalog-overrides/{kind}/remove-model")
+async def remove_model_catalog_override(kind: str, payload: CustomCatalogSlugRequest):
+    """Retire/remove a model slug from a specific harness kind."""
+    from deeptutor.services.subagent.custom_catalog import remove_custom_model
+
+    return await asyncio.to_thread(remove_custom_model, kind, payload.slug)
+
+
+@router.post("/model-catalog-overrides/{kind}/restore-model")
+async def restore_model_catalog_override(kind: str, payload: CustomCatalogSlugRequest):
+    """Restore a previously retired model slug for a specific harness kind."""
+    from deeptutor.services.subagent.custom_catalog import restore_removed_model
+
+    return await asyncio.to_thread(restore_removed_model, kind, payload.slug)
+
+
+

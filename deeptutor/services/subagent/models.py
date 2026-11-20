@@ -62,6 +62,10 @@ _ANTIGRAVITY_MODELS = (
     ("gemini-4-argon-high", "Gemini 4 Argon (High)"),
     ("gemini-4-argon-medium", "Gemini 4 Argon (Medium)"),
     ("gemini-4-argon-low", "Gemini 4 Argon (Low)"),
+    ("gemini-4-neon-high", "Gemini 4 Neon (High)"),
+    ("gemini-4-neon-medium", "Gemini 4 Neon (Medium)"),
+    ("gemini-4-hydrogen-high", "Gemini 4 Hydrogen (High)"),
+    ("gemini-4-hydrogen-medium", "Gemini 4 Hydrogen (Medium)"),
     ("gemini-3.8-flash-high", "Gemini 3.8 Flash (High)"),
     ("gemini-3.8-flash-medium", "Gemini 3.8 Flash (Medium)"),
     ("gemini-3.8-flash-low", "Gemini 3.8 Flash (Low)"),
@@ -102,12 +106,17 @@ _DEEPSEEK_HARNESS_EFFORTS = (
 _COMMAND_CODE_EFFORTS = ("off", "low", "high", "max")
 _COMMAND_CODE_DEFAULT_MODELS = (
     ("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash"),
+    ("deepseek/deepseek-v4.1-flash-1017", "DeepSeek V4.1 Flash (1017 Edition)"),
     ("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash"),
     ("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro"),
     ("qwen/qwen3.8-flash", "Qwen 3.8 Flash"),
     ("qwen/qwen3.8-max", "Qwen 3.8 Max"),
     ("moonshotai/kimi-k3", "Kimi K3"),
+    ("z-ai/glm-5-flash", "GLM 5 Flash"),
     ("z-ai/glm-5.3-flash", "GLM 5.3 Flash"),
+    ("xiaomi/mimo-v2-pro", "MiMo V2 Pro"),
+    ("xiaomi/mimo-v2-flash", "MiMo V2 Flash"),
+    ("tencent/hunyuan-4-preview", "Tencent Hunyuan 4 Preview"),
     ("reflection/beam:free", "Reflection Beam (free)"),
     ("inclusionai/ling-3.1-flash-1019:free", "Ling 3.1 Flash (free)"),
 )
@@ -456,10 +465,31 @@ _PROVIDERS: dict[str, Callable[..., Awaitable[BackendOptions]]] = {
 }
 
 
+def _apply_custom_overrides(options: BackendOptions) -> BackendOptions:
+    """Merge user-owned added/retired models from custom_model_catalogs.json."""
+    from deeptutor.services.subagent.custom_catalog import merge_backend_model_options
+
+    merged = merge_backend_model_options(
+        options.kind,
+        [m.to_dict() for m in options.models],
+        options.efforts,
+    )
+    options.models = [
+        ModelOption(
+            slug=item["slug"],
+            display_name=item["display_name"],
+            default_effort=item.get("default_effort", ""),
+            efforts=list(item.get("efforts", [])),
+        )
+        for item in merged
+    ]
+    return options
+
+
 async def list_backend_options() -> list[BackendOptions]:
     """Synced model/effort options for every backend (the /settings sync source)."""
     results = await asyncio.gather(*(provider() for provider in _PROVIDERS.values()))
-    return list(results)
+    return [_apply_custom_overrides(item) for item in results]
 
 
 async def sync_backend_options(kind: str) -> BackendOptions:
@@ -474,11 +504,11 @@ async def sync_backend_options(kind: str) -> BackendOptions:
         from deeptutor.services.subagent.claude_models import sync_claude_models
 
         await sync_claude_models()  # writes the cache that _claude_options reads
-        return await _claude_options()
+        return _apply_custom_overrides(await _claude_options())
     if kind in ("opencode", "mimo"):
-        return await _PROVIDERS[kind](refresh=True)
+        return _apply_custom_overrides(await _PROVIDERS[kind](refresh=True))
     provider = _PROVIDERS.get(kind, _codex_options)
-    return await provider()
+    return _apply_custom_overrides(await provider())
 
 
 __all__ = [

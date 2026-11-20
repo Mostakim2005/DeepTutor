@@ -88,12 +88,15 @@
   * `start.ps1`, `stop.ps1`, `configure-ai.ps1` -> PowerShell entry points
   * `scripts/configure_ai.py` -> `main`, provider slot enumeration
 
-### [FEATURE: Subagent Model Catalog & Composer Badges] | Aliases: Antigravity models, effort tier, model pill, friendly label
-> **1-Line Summary:** Each subagent backend publishes its live model catalog with effort tiers, and the composer renders a friendly label plus a reasoning badge.
-* **User Intention (Non-Negotiable):** A model chosen for a subagent connection shows its real capability tier, not a raw identifier.
-* **Visual / UI Behavior:** The model selector shows `ModelOptionRow` entries with a reasoning pill (`high`/`medium`/`low`).
+### [FEATURE: Subagent Model Catalog & Composer Badges] | Aliases: Antigravity models, effort tier, model pill, friendly label, Bravo 4, custom model catalog, effort fallback
+> **1-Line Summary:** Each subagent backend publishes its live model catalog with user-owned JSON add/retire overrides and safe effort-level fallback, while the composer renders friendly labels and reasoning badges.
+* **User Intention (Non-Negotiable):** Learners can add newly released models or retire unavailable ones in `data/user/settings/custom_model_catalogs.json` without editing Python code, and unsupported effort tiers degrade safely instead of failing.
+* **Visual / UI Behavior:** The model selector shows `ModelOptionRow` entries with a reasoning pill (`high`/`medium`/`low`), reflecting both discovered models and user-owned overrides.
 * **Code Anchors (Grep Targets):**
-  * `deeptutor/services/subagent/models.py` -> `_ANTIGRAVITY_MODELS`
+  * `data/user/settings/custom_model_catalogs.json` -> user-owned per-harness added/retired model overrides
+  * `deeptutor/services/subagent/custom_catalog.py` -> `load_custom_catalogs`, `add_custom_model`, `remove_custom_model`, `restore_removed_model`, `resolve_effort_with_fallback`, `merge_backend_model_options`
+  * `deeptutor/services/subagent/models.py` -> `_ANTIGRAVITY_MODELS`, `_COMMAND_CODE_DEFAULT_MODELS`, `_apply_custom_overrides`
+  * `deeptutor/api/routers/settings.py` -> `/model-catalog-overrides`, `/add-model`, `/remove-model`, `/restore-model`
   * `web/components/chat/home/ModelSelector.tsx` -> `ModelOptionRow`
 
 ### [FEATURE: Subagent Backends] | Aliases: Command Code, OpenCode, Antigravity, DeepSeek Harness, Codex, Claude Code, Kimi, Grok, ACP
