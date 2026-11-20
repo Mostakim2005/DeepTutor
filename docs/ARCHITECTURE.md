@@ -208,7 +208,8 @@ flowchart TB
   * `docs/PRODUCT.md` -> feature intent
   * `docs/ARCHITECTURE.md` -> subsystem mechanics
   * `docs/DECISIONS_AND_TRAPS.md` -> pivots and landmines
-  * `AGENTS.md` -> operating protocol and project map
+  * `docs/VISUAL_LOG.md` -> Markdown-native color-coded Mermaid flowcharts
+  * `AGENTS.md` -> repository-specific instructions and project map
 
 ### [SUBSYSTEM: Merge Compatibility Boundary] | Aliases: requestVoid, Tooltip, render-time state, generated contracts, i18n parity
 > **1-Line Summary:** Custom UI in this fork must pass the same shared-client, accessibility, contract, and locale gates as upstream code, or a clean merge still fails verification.

@@ -271,6 +271,49 @@ flowchart LR
   * `docs/ARCHITECTURE.md` -> subsystem map
   * `AGENTS.md` -> protocol and project map
 
+### [DECISION: Deterministic-Export-Snapshots-And-Markdown-Visual-Log] | Aliases: L-09, export snapshots, golden files, VISUAL_LOG.md, VISUAL_GUIDE.html, AGENTS trim
+> **1-Line Summary:** Locked all seven export formats behind deterministic golden snapshots before Wave 3 migrations, and replaced the monolithic `VISUAL_GUIDE.html` with Markdown-native `VISUAL_LOG.md`.
+* **Decision Maker:** `[DECIDED BY: HUMAN]`
+* **Original User Intention:** Ensure upcoming export library migrations (`dolanmiu/docx`, `pdf-lib`) cannot silently regress formatting or CJK/math fidelity, and keep project visual documentation readable directly in GitHub and Obsidian without duplicating global agent protocol text.
+* **Options Considered:**
+  * **Option A (Rejected):** Start migrating DOCX and PDF libraries directly while keeping `docs/VISUAL_GUIDE.html` and the full universal protocol copy inside root `AGENTS.md`. High risk of silent export regressions and documentation drift.
+  * **Option B (Chosen):** Land `L-09` deterministic export snapshots first (UTC ZIP headers, frozen metadata timestamps, normalized PDF hashes, fixed multi-element fixture), trim root `AGENTS.md` to repository-specific facts, and replace `docs/VISUAL_GUIDE.html` with `docs/VISUAL_LOG.md` using Obsidian- and GitHub-compatible color-coded Mermaid flowcharts.
+* **Visual Pivot Map (What Failed vs. What Works):**
+
+```mermaid
+flowchart LR
+    classDef startNode fill:#1d4ed8,stroke:#1e3a8a,color:#ffffff
+    classDef processNode fill:#0f766e,stroke:#115e59,color:#ffffff
+    classDef outputNode fill:#15803d,stroke:#14532d,color:#ffffff
+    classDef trapNode fill:#b91c1c,stroke:#7f1d1d,color:#ffffff
+
+    subgraph Failed["Before: Unguarded Migrations & Heavy HTML Guide"]
+        A1["Direct DOCX/PDF Rewrite"]:::trapNode -->|"No baseline"| A2["Silent Formatting Drift"]:::trapNode
+        A3["Static VISUAL_GUIDE.html"]:::trapNode -->|"Hard to diff in Git/Obsidian"| A4["Stale Visual Docs"]:::trapNode
+    end
+    subgraph Active["After: L-09 Golden Guard & Markdown Visual Log"]
+        B1["L-09 Fixed Fixture & UTC ZIP"]:::startNode -->|"Vitest snapshots"| B2["7-Format Golden Guard"]:::outputNode
+        B3["docs/VISUAL_LOG.md + Trimmed AGENTS.md"]:::processNode -->|"Native Mermaid"| B4["Diffable GitHub & Obsidian Docs"]:::outputNode
+    end
+
+    subgraph Legend["Legend (Color Guide)"]
+        L1["Blue = Baseline Trigger"]:::startNode
+        L2["Teal = Active Workflow"]:::processNode
+        L3["Green = Verified Outcome"]:::outputNode
+        L4["Red = Retired / Risky Pattern"]:::trapNode
+    end
+```
+
+* **Code Anchors (Grep Targets):**
+  * `web/lib/export/zip.ts` -> `getDosDateTime`, `createZipBlob`
+  * `web/lib/export/docx-builder.ts` -> `buildDocxBlob`
+  * `web/lib/export/xlsx-builder.ts` -> `buildXlsxBlob`
+  * `web/lib/export/exporter.ts` -> `exportSession`
+  * `web/tests/fixtures/export/conversation.fixture.ts` -> `FIXED_EXPORT_DATE`, `EXPORT_FIXTURE_MESSAGES`
+  * `web/tests/lib/export-snapshots.spec.ts` -> deterministic golden snapshot assertions
+  * `docs/VISUAL_LOG.md` -> Markdown-native visual log
+  * `AGENTS.md` -> repository-specific instructions
+
 ---
 
 ## 2. Do-Not-Touch Engineering Landmines (Traps)

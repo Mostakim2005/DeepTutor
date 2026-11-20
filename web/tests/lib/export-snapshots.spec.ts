@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_EXPORT_FILTER_OPTIONS,
@@ -13,10 +12,7 @@ import {
   FIXED_EXPORT_DATE,
 } from "../fixtures/export/conversation.fixture";
 
-const GOLDEN_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../fixtures/export/golden",
-);
+const GOLDEN_DIR = path.resolve(__dirname, "../fixtures/export/golden");
 
 function goldenPath(filename: string): string {
   return path.join(GOLDEN_DIR, filename);
