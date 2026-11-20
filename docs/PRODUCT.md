@@ -99,12 +99,15 @@
   * `deeptutor/api/routers/settings.py` -> `/model-catalog-overrides`, `/add-model`, `/remove-model`, `/restore-model`
   * `web/components/chat/home/ModelSelector.tsx` -> `ModelOptionRow`
 
-### [FEATURE: Subagent Backends] | Aliases: Command Code, OpenCode, Antigravity, DeepSeek Harness, Codex, Claude Code, Kimi, Grok, ACP
-> **1-Line Summary:** External coding agents run as first-class subagents with per-connection model and reasoning-effort overrides.
-* **User Intention (Non-Negotiable):** Each backend keeps its own transport and session rules; model and effort choices made in the composer must reach the backend exactly.
-* **Visual / UI Behavior:** The composer lists available subagents and their model tiers; a run streams its transcript into the chat.
+### [FEATURE: Subagent Backends] | Aliases: Command Code, OpenCode, Antigravity, DeepSeek Harness, FreeBuff, Codex, Claude Code, Kimi, Grok, ACP, Bravo 5, Delta 1, custom harness
+> **1-Line Summary:** External coding agents — including Antigravity, Command Code, OpenCode, DeepSeek Harness, FreeBuff, and user-registered plug-and-play CLI/ACP harnesses — run as first-class subagents with model and effort overrides.
+* **User Intention (Non-Negotiable):** Each backend keeps its own transport and session rules; model and effort choices made in the composer reach the backend with safe effort fallback, and new CLI/ACP harnesses (or custom FreeBuff flags) can be configured in `data/user/settings/custom_harnesses.json` without editing Python code.
+* **Visual / UI Behavior:** The composer lists available auto-detected subagents and their model tiers; a run streams its transcript into the chat.
 * **Code Anchors (Grep Targets):**
-  * `deeptutor/services/subagent/registry.py` -> backend registration
+  * `data/user/settings/custom_harnesses.json` -> user-owned plug-and-play CLI/ACP harness specifications
+  * `deeptutor/services/subagent/custom_harnesses.py` -> `FreeBuffBackend`, `ConfigurableCliBackend`, `load_custom_harnesses`, `upsert_custom_harness`, `delete_custom_harness`
+  * `deeptutor/services/subagent/registry.py` -> `_BACKENDS`, `list_backend_kinds`, `get_backend`, `detect_all`
+  * `deeptutor/api/routers/settings.py` -> `/custom-harnesses`
   * `deeptutor/services/subagent/command_code.py` -> `CommandCodeBackend`
   * `deeptutor/services/subagent/opencode_family.py` -> `OpencodeFamilyBackend`
   * `deeptutor/services/subagent/deepseek_harness.py` -> DeepSeek Harness backend

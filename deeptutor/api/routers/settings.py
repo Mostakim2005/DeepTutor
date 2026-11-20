@@ -2845,4 +2845,51 @@ async def restore_model_catalog_override(kind: str, payload: CustomCatalogSlugRe
     return await asyncio.to_thread(restore_removed_model, kind, payload.slug)
 
 
+# ── Plug-and-Play Custom CLI / ACP Harnesses (Bravo 5 + Delta 1) ────────────
+
+
+class CustomHarnessPayload(BaseModel):
+    display_name: str = Field(default="", max_length=_MAX_PREFERENCE_NAME_CHARS)
+    protocol: str = Field(default="cli", max_length=16)
+    command: str = Field(min_length=1, max_length=260)
+    version_args: list[str] = Field(default_factory=lambda: ["--version"])
+    prompt_args: list[str] = Field(default_factory=lambda: ["-p", "{prompt}"])
+    model_flag: str = Field(default="--model", max_length=64)
+    effort_flag: str = Field(default="--effort", max_length=64)
+    efforts: list[str] = Field(default_factory=lambda: ["low", "medium", "high", "max"])
+    default_model: str = Field(default="", max_length=_MAX_PREFERENCE_NAME_CHARS)
+    models: list[dict[str, Any]] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+@router.get("/custom-harnesses")
+async def get_custom_harnesses():
+    """List all user-registered plug-and-play CLI/ACP harnesses."""
+    from deeptutor.services.subagent.custom_harnesses import load_custom_harnesses
+
+    return await asyncio.to_thread(load_custom_harnesses)
+
+
+@router.put("/custom-harnesses/{kind}")
+async def upsert_custom_harness_route(kind: str, payload: CustomHarnessPayload):
+    """Register or update a custom CLI/ACP harness (or customize FreeBuff flags)."""
+    from deeptutor.services.subagent.custom_harnesses import upsert_custom_harness
+
+    try:
+        return await asyncio.to_thread(upsert_custom_harness, kind, payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/custom-harnesses/{kind}")
+async def delete_custom_harness_route(kind: str):
+    """Remove a user-registered custom harness."""
+    from deeptutor.services.subagent.custom_harnesses import delete_custom_harness
+
+    removed = await asyncio.to_thread(delete_custom_harness, kind)
+    return {"kind": kind, "deleted": removed}
+
+
+
 

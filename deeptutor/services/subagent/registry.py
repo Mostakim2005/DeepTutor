@@ -19,6 +19,10 @@ from deeptutor.services.subagent.base import SubagentBackend
 from deeptutor.services.subagent.claude_code import ClaudeCodeBackend
 from deeptutor.services.subagent.codex import CodexBackend
 from deeptutor.services.subagent.command_code import CommandCodeBackend
+from deeptutor.services.subagent.custom_harnesses import (
+    FreeBuffBackend,
+    build_dynamic_custom_backends,
+)
 from deeptutor.services.subagent.deepseek_harness import DeepSeekHarnessBackend
 from deeptutor.services.subagent.grok import GrokBackend
 from deeptutor.services.subagent.hermes import HermesBackend
@@ -43,30 +47,40 @@ _BACKENDS: dict[str, SubagentBackend] = {
         OpenClawBackend(),
         DeepSeekHarnessBackend(),
         CommandCodeBackend(),
+        FreeBuffBackend(),
         AcpBackend(),
     )
 }
 
 
+def _all_backends() -> dict[str, SubagentBackend]:
+    merged = dict(_BACKENDS)
+    merged.update(build_dynamic_custom_backends(set(_BACKENDS.keys())))
+    return merged
+
+
 def list_backend_kinds() -> list[str]:
-    """Return every connectable local, remote, and Partner backend kind."""
-    return list(_BACKENDS.keys())
+    """Return every connectable local, remote, custom, and Partner backend kind."""
+    return list(_all_backends().keys())
 
 
 def get_backend(kind: str) -> SubagentBackend | None:
-    return _BACKENDS.get(str(kind or "").strip())
+    cleaned = str(kind or "").strip()
+    if cleaned in _BACKENDS:
+        return _BACKENDS[cleaned]
+    return build_dynamic_custom_backends(set(_BACKENDS.keys())).get(cleaned)
 
 
 def _detectable_backends() -> list[SubagentBackend]:
     return [
         backend
-        for backend in _BACKENDS.values()
+        for backend in _all_backends().values()
         if getattr(backend, "local_cli", True) or getattr(backend, "detectable", False)
     ]
 
 
 async def detect_all() -> list[DetectResult]:
-    """Probe local CLIs and configured remote backends."""
+    """Probe local CLIs, user-registered custom harnesses, and configured remote backends."""
     backends = _detectable_backends()
     results = await asyncio.gather(
         *(backend.detect() for backend in backends),

@@ -448,6 +448,43 @@ async def _command_code_options() -> BackendOptions:
     )
 
 
+async def _custom_harness_options(kind: str) -> BackendOptions:
+    from deeptutor.services.subagent.custom_harnesses import get_effective_harness_spec
+
+    backend = get_backend(kind)
+    detected = await backend.detect() if backend else None
+    spec = get_effective_harness_spec(kind) or {}
+    efforts = list(spec.get("efforts") or ["low", "medium", "high", "max"])
+    models = [
+        ModelOption(
+            slug=m["slug"],
+            display_name=m.get("display_name") or m["slug"],
+            default_effort=m.get("default_effort", ""),
+            efforts=list(m.get("efforts") or efforts),
+        )
+        for m in spec.get("models", [])
+    ]
+    display_name = (
+        (detected.display_name if detected and detected.display_name else "")
+        or str(spec.get("display_name") or kind)
+    )
+    return BackendOptions(
+        kind=kind,
+        display_name=display_name,
+        available=detected.available if detected else False,
+        version=detected.version if detected else "",
+        default_model=str(spec.get("default_model") or ""),
+        models=models,
+        efforts=efforts,
+        allow_custom_model=True,
+        detail="" if (detected and detected.available) else (detected.detail if detected else f"{kind} CLI not found on PATH"),
+    )
+
+
+async def _freebuff_options() -> BackendOptions:
+    return await _custom_harness_options("freebuff")
+
+
 # One provider per backend kind — the discovery order is the settings order.
 _PROVIDERS: dict[str, Callable[..., Awaitable[BackendOptions]]] = {
     "claude_code": _claude_options,
@@ -462,6 +499,7 @@ _PROVIDERS: dict[str, Callable[..., Awaitable[BackendOptions]]] = {
     "openclaw": _openclaw_options,
     "deepseek_harness": _deepseek_harness_options,
     "command_code": _command_code_options,
+    "freebuff": _freebuff_options,
 }
 
 
@@ -487,8 +525,17 @@ def _apply_custom_overrides(options: BackendOptions) -> BackendOptions:
 
 
 async def list_backend_options() -> list[BackendOptions]:
-    """Synced model/effort options for every backend (the /settings sync source)."""
-    results = await asyncio.gather(*(provider() for provider in _PROVIDERS.values()))
+    """Synced model/effort options for every built-in and custom backend."""
+    from deeptutor.services.subagent.custom_harnesses import load_custom_harnesses
+
+    dynamic_kinds = [
+        kind
+        for kind, spec in load_custom_harnesses()["harnesses"].items()
+        if kind not in _PROVIDERS and spec.get("enabled", True)
+    ]
+    coros = [provider() for provider in _PROVIDERS.values()]
+    coros.extend(_custom_harness_options(kind) for kind in dynamic_kinds)
+    results = await asyncio.gather(*coros)
     return [_apply_custom_overrides(item) for item in results]
 
 
@@ -507,8 +554,10 @@ async def sync_backend_options(kind: str) -> BackendOptions:
         return _apply_custom_overrides(await _claude_options())
     if kind in ("opencode", "mimo"):
         return _apply_custom_overrides(await _PROVIDERS[kind](refresh=True))
-    provider = _PROVIDERS.get(kind, _codex_options)
-    return _apply_custom_overrides(await provider())
+    provider = _PROVIDERS.get(kind)
+    if provider is not None:
+        return _apply_custom_overrides(await provider())
+    return _apply_custom_overrides(await _custom_harness_options(kind))
 
 
 __all__ = [
