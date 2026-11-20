@@ -188,6 +188,44 @@ flowchart LR
   * `web/features/chat/components/ChatWorkspace.tsx` -> `KnowledgeBase`
   * `web/locales/*/app.json` -> locale key sets
 
+### [DECISION: v1.7.4 Merge Kept Local Signing Key] | Aliases: v1.7.4, desktop security, key rotation, runtime-public.pem, signing key conflict
+> **1-Line Summary:** The v1.7.4 intake absorbed upstream's desktop signing security hardening and Electron recovery logic while intentionally retaining the fork's local Ed25519 public key so that self-compiled desktop packages and local runtimes remain authentic.
+* **Decision Maker:** `[DECIDED BY: HUMAN — retain local signing key, absorb all upstream security & recovery logic]`
+* **Original User Intention:** Pull official upstream v1.7.4 improvements without breaking fork self-containment; the fork must authenticate its own runtimes.
+* **Intake Shape:** 6 commits from `upstream/main` (`v1.7.4` / `341af371b`). 4 transient exfil test commits net 0 files; commit `d697b5af7` adds key rotation, recovery logic, and CI protection; commit `341af371b` bumps `__version__ = "1.7.4"`.
+* **Collisions and Resolutions:**
+
+| File | Local behavior | Upstream change | Resolution |
+| --- | --- | --- | --- |
+| `apps/desktop/assets/runtime-public.pem` | Fork public key (`MCow...iwwo=`) set on Nov 7 | Rotated upstream key (`MCow...DJu0=`) after credential leak | Kept local key; self-built desktop binaries authenticate against personal signing secrets |
+| `apps/desktop/src/bundles.mjs` | Threw generic error on invalid signature | Added `InvalidRuntimeSignature` and `{ replaceUntrusted: true }` recovery | Kept upstream change; shell recovers safely from mismatched runtimes |
+| `apps/desktop/src/main.mjs` | Did not replace untrusted core | Automatic seed replacement, workspace backup, and recovery transaction | Kept upstream change; seamless upgrade safety |
+| `.github/workflows/desktop-release.yml` | Open secret access on pushes | Gated to `desktop-release` environment on official tags | Kept upstream change; prevents credential exposure |
+| `deeptutor/__version__.py` | Version `1.7.3` | Version `1.7.4` | Kept upstream change; official version bump |
+
+* **Visual Pivot Map (What Failed vs. What Works):**
+
+```mermaid
+flowchart LR
+    UP["v1.7.4 upstream (341af371b)"] --> MERGE["merge on sync/v1.7.4"]
+    LOCAL["fork features (143019155)"] --> MERGE
+    MERGE --> K["runtime-public.pem: Keep fork key"]
+    MERGE --> R["bundles.mjs: Adopt recovery logic"]
+    MERGE --> W[".github: Adopt CI environment gates"]
+    MERGE --> V["__version__.py: Bump to 1.7.4"]
+    K --> VERIFY["tests pass (23 desktop, compileall)"]
+    R --> VERIFY
+    W --> VERIFY
+    V --> VERIFY
+    VERIFY --> FF["fast-forward main upon approval"]
+```
+
+* **Code Anchors (Grep Targets):**
+  * `apps/desktop/assets/runtime-public.pem` -> `MCowBQYDK2VwAyEAdAR8cWD50cSeH8kXAh0bRe1nFWgfikMhrq6fvstiwwo=`
+  * `apps/desktop/src/bundles.mjs` -> `InvalidRuntimeSignature`, `replaceUntrusted`
+  * `apps/desktop/src/main.mjs` -> `startupManifest`, `replaceUntrusted`
+  * `deeptutor/__version__.py` -> `__version__`
+
 ### [DECISION: Fork Audit Remediation] | Aliases: audit, defect sweep, duplicate tables, CJK pdf, preference race, dead code
 > **1-Line Summary:** A fork-scoped audit found 25 defects and 7 UI issues in fork-authored code; this pass closed all of them except two library migrations and one refactor, which stay deferred on purpose.
 * **Decision Maker:** `[DECIDED BY: AGENT — findings reviewed and fix pass authorised by Human]`

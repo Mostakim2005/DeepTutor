@@ -196,3 +196,45 @@ flowchart TD
   * `AGENTS.md` -> trimmed repository-specific instructions
   * `docs/VISUAL_LOG.md` -> Markdown-native visual feature and change log
   * `docs/DECISIONS_AND_TRAPS.md` -> `[DECISION: Deterministic-Export-Snapshots-And-Markdown-Visual-Log]`
+
+---
+
+### [VISUAL: v1.7.4-Desktop-Security-Merge] | Aliases: v1.7.4, desktop security, key rotation, sync/v1.7.4, dry run
+> **1-Line Summary:** Visual flow of the v1.7.4 upstream intake on `sync/v1.7.4`, preserving the fork's local signing key while absorbing upstream runtime recovery logic and CI release protections.
+
+```mermaid
+flowchart TD
+    classDef startNode fill:#1d4ed8,stroke:#1e3a8a,color:#ffffff
+    classDef processNode fill:#0f766e,stroke:#115e59,color:#ffffff
+    classDef outputNode fill:#15803d,stroke:#14532d,color:#ffffff
+    classDef trapNode fill:#b91c1c,stroke:#7f1d1d,color:#ffffff
+
+    Upstream["upstream/main (v1.7.4 - 341af371b)"]:::startNode -->|"6 Commits Intake"| DryRun["Dry Run: git merge-tree"]:::processNode
+    MainFork["Local main (143019155)"]:::startNode -->|"Preserve Custom Features"| DryRun
+
+    DryRun -->|"9 files clean auto-merge"| CleanSet["Workflows, Electron Main, Bundles, Tests, README"]:::processNode
+    DryRun -->|"1 file conflict: runtime-public.pem"| KeyConflict["Public Key Collision"]:::trapNode
+
+    KeyConflict -->|"Resolution: Keep Fork Key"| ForkKey["Retain MCow...iwwo= (Self-Signed Package Authenticity)"]:::outputNode
+    CleanSet --> MergeBranch["Integrated on sync/v1.7.4"]:::processNode
+    ForkKey --> MergeBranch
+
+    MergeBranch --> Verification["Gate Verification: compileall + desktop unit tests (23 pass)"]:::processNode
+    Verification --> ReadyFF["Ready for Fast-Forward to main upon Approval"]:::outputNode
+
+    subgraph Legend["Legend (Color Guide)"]
+        L1["Blue = Ingress Sources (Upstream & Fork)"]:::startNode
+        L2["Teal = Automated Dry-Run & Clean Merges"]:::processNode
+        L3["Green = Verified Safe Deliverable"]:::outputNode
+        L4["Red = Cryptographic Key Conflict"]:::trapNode
+    end
+```
+
+* **Plain-English Walkthrough:** Upstream released v1.7.4 to rotate desktop signing credentials and harden GitHub Actions pipelines after an artifact leak. During the merge onto `sync/v1.7.4`, Git flagged a collision on `apps/desktop/assets/runtime-public.pem`. The fork resolved the collision by retaining its own public key so self-compiled desktop packages and local runtimes remain verified, while adopting upstream's new runtime recovery error-handling in `bundles.mjs` and `main.mjs`, tag-gated workflow protections, and version bump.
+* **Code Anchors (Grep Targets):**
+  * `apps/desktop/assets/runtime-public.pem` -> `MCowBQYDK2VwAyEAdAR8cWD50cSeH8kXAh0bRe1nFWgfikMhrq6fvstiwwo=`
+  * `apps/desktop/src/bundles.mjs` -> `InvalidRuntimeSignature`, `replaceUntrusted`
+  * `apps/desktop/src/main.mjs` -> `startupManifest`, `replaceUntrusted`
+  * `deeptutor/__version__.py` -> `1.7.4`
+  * `docs/DECISIONS_AND_TRAPS.md` -> `[DECISION: v1.7.4 Merge Kept Local Signing Key]`
+

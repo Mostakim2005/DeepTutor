@@ -1,12 +1,12 @@
 # Project Operating Instructions (`AGENTS.md`)
 
-> **1-Line Summary:** Repository-specific instructions for the DeepTutor personal fork (`v1.7.3`); inherits all universal workflow, confirmation-gate, documentation, and reporting rules from the global master `AGENTS.md` (`C:\Users\kazir\.agent-templates\AGENTS.md` / `https://github.com/Mostakim2005/.agent-templates`).
+> **1-Line Summary:** Repository-specific instructions for the DeepTutor personal fork (`v1.7.4`); inherits all universal workflow, confirmation-gate, documentation, and reporting rules from the global master `AGENTS.md` (`C:\Users\kazir\.agent-templates\AGENTS.md` / `https://github.com/Mostakim2005/.agent-templates`).
 
 ---
 
 ## 1. Project Identity, Tech Stack & Environment
 
-- **Project:** DeepTutor Personal Fork (`v1.7.3`) — agent-native tutoring app where CLI, WebSocket, and SDK requests share one durable turn service; this fork adds a browser export engine, extra subagent backends, model pinning/hiding, and Windows launcher/CLI-app fixes.
+- **Project:** DeepTutor Personal Fork (`v1.7.4`) — agent-native tutoring app where CLI, WebSocket, and SDK requests share one durable turn service; this fork adds a browser export engine, extra subagent backends, model pinning/hiding, and Windows launcher/CLI-app fixes.
 - **Tech Stack:**
   - **Backend / CLI:** Python 3.12–3.14 (`.venv`), FastAPI (`deeptutor/api/`), Typer (`deeptutor_cli/`).
   - **Frontend:** Next.js 16 / React 19 / TypeScript (`web/`), Vitest unit tests, Playwright E2E.
