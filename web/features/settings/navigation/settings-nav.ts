@@ -152,6 +152,14 @@ const MODEL_CHILDREN: SettingsLeaf[] = [
     service: "llm",
   },
   {
+    key: "model-hub",
+    href: "/settings/model-hub",
+    label: "Model & Harness Hub",
+    blurb: "Portable model preferences, custom model catalogs, and plug-and-play CLI/ACP harnesses.",
+    icon: SlidersHorizontal,
+    tile: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+  },
+  {
     key: "task-models",
     href: "/settings#task-models",
     label: "Task models",
@@ -511,6 +519,7 @@ const STORAGE_PATHS: Record<string, string> = {
   multimodal: "data/user/settings/model_catalog.json",
   connections: "data/user/settings/model_catalog.json",
   "task-models": "data/user/settings/model_catalog.json",
+  "model-hub": "data/user/settings/model_preferences.json · custom_model_catalogs.json · custom_harnesses.json",
   knowledge: "data/user/settings/document_parsing.json",
   "video-learning": "data/user/settings/video_learning.json",
   starters: "data/user/settings/interface.json",

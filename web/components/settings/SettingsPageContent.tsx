@@ -81,6 +81,10 @@ const Llm = dynamic(
     loading,
   },
 );
+const ModelHub = dynamic(
+  () => import("@/features/settings/sections/models/ModelHubSettingsSection"),
+  { loading },
+);
 const Task = dynamic(
   () => import("@/features/settings/sections/models/TaskModelsSettingsSection"),
   { loading },
@@ -186,6 +190,7 @@ const PAGES: Record<string, React.ComponentType> = {
   guardian: Guardian,
   connections: Connections,
   llm: Llm,
+  "model-hub": ModelHub,
   "task-models": Task,
   embedding: Embedding,
   search: Search,
