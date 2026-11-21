@@ -1,408 +1,430 @@
 /**
- * Publication-grade PDF generator for DeepTutor conversations.
- * Includes jspdf-autotable for multi-page tables with repeated headers,
- * PDF outline bookmarks for reader navigation, styled dialogue cards,
- * and page numbering.
+ * Downloadable PDF generator built on `pdf-lib` + `@pdf-lib/fontkit` (OSS-02 / SUN-02).
+ *
+ * Supports subsetted Unicode font embedding via `metadata.unicodeFontBytes`
+ * (using `@pdf-lib/fontkit`), deterministic creation/modification timestamps
+ * for L-09 snapshot stability, multi-page wrapping for prose, code blocks, and
+ * tables with repeating headers, plus graceful fallback to StandardFonts when
+ * no custom font bytes are provided.
  */
 
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import type {
-  ExportFilterOptions,
-  ExportMetadata,
-  NormalizedExportMessage,
+import fontkit from "@pdf-lib/fontkit";
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  type PDFFont,
+  type PDFPage,
+} from "pdf-lib";
+import {
+  EXPORT_LIMITS,
+  type ExportFilterOptions,
+  type ExportMetadata,
+  type ExportTable,
+  type NormalizedExportMessage,
 } from "./types";
+
+const PAGE_WIDTH = 595.28; // A4 portrait in points
+const PAGE_HEIGHT = 841.89;
+const MARGIN = 44;
+const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+const FOOTER_HEIGHT = 24;
+
+function sanitizeForFont(text: string, isUnicodeFont: boolean): string {
+  const normalized = (text || "").replace(/\r\n/g, "\n").replace(/\t/g, "  ");
+  if (isUnicodeFont) return normalized;
+  // StandardFonts only support WinAnsi (Latin-1 printable range).
+  return normalized.replace(/[^\x20-\x7E\xA0-\xFF\n]/g, "?");
+}
+
+function wrapLine(
+  text: string,
+  font: PDFFont,
+  fontSize: number,
+  maxWidth: number,
+): string[] {
+  if (!text) return [""];
+  const words = text.split(/(\s+)/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const part of words) {
+    const candidate = current + part;
+    if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+      current = candidate;
+    } else {
+      if (current.trimEnd()) {
+        lines.push(current.trimEnd());
+        current = part.trimStart();
+      } else {
+        // Hard-break a single overlong token (e.g., URL or long identifier)
+        let chunk = "";
+        for (const ch of part) {
+          if (font.widthOfTextAtSize(chunk + ch, fontSize) <= maxWidth) {
+            chunk += ch;
+          } else {
+            if (chunk) lines.push(chunk);
+            chunk = ch;
+          }
+        }
+        current = chunk;
+      }
+    }
+  }
+  if (current || lines.length === 0) {
+    lines.push(current.trimEnd());
+  }
+  return lines;
+}
 
 export async function buildPdfBlob(
   messages: NormalizedExportMessage[],
   options: ExportFilterOptions,
   metadata: ExportMetadata,
 ): Promise<Blob> {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
+  const pdfDoc = await PDFDocument.create();
+  const exportedAt = metadata.exportedAt ?? new Date();
+  const title = metadata.title || "DeepTutor Conversation";
+
+  pdfDoc.setTitle(title);
+  pdfDoc.setCreator("DeepTutor");
+  pdfDoc.setProducer("DeepTutor (pdf-lib + fontkit)");
+  pdfDoc.setCreationDate(exportedAt);
+  pdfDoc.setModificationDate(exportedAt);
+
+  let isUnicode = false;
+  let regularFont: PDFFont;
+  let boldFont: PDFFont;
+  let monoFont: PDFFont;
+
+  if (metadata.unicodeFontBytes && metadata.unicodeFontBytes.byteLength > 0) {
+    pdfDoc.registerFontkit(fontkit);
+    regularFont = await pdfDoc.embedFont(metadata.unicodeFontBytes, { subset: true });
+    boldFont = regularFont;
+    monoFont = regularFont;
+    isUnicode = true;
+  } else {
+    regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    monoFont = await pdfDoc.embedFont(StandardFonts.Courier);
+  }
+
+  let page: PDFPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  let cursorY = PAGE_HEIGHT - MARGIN;
+
+  const ensureSpace = (needed: number) => {
+    if (cursorY - needed < MARGIN + FOOTER_HEIGHT) {
+      page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      cursorY = PAGE_HEIGHT - MARGIN;
+    }
+  };
+
+  const drawWrapped = (
+    rawText: string,
+    opts: {
+      font?: PDFFont;
+      size?: number;
+      color?: ReturnType<typeof rgb>;
+      indent?: number;
+      lineGap?: number;
+      bgFill?: ReturnType<typeof rgb>;
+      leftAccent?: ReturnType<typeof rgb>;
+    } = {},
+  ) => {
+    const font = opts.font ?? regularFont;
+    const size = opts.size ?? 10;
+    const color = opts.color ?? rgb(0.12, 0.14, 0.16);
+    const indent = opts.indent ?? 0;
+    const lineHeight = size + (opts.lineGap ?? 4);
+    const maxWidth = CONTENT_WIDTH - indent;
+    const safe = sanitizeForFont(rawText, isUnicode);
+
+    for (const rawLine of safe.split("\n")) {
+      const wrapped = wrapLine(rawLine, font, size, maxWidth);
+      for (const line of wrapped) {
+        ensureSpace(lineHeight + 2);
+        if (opts.bgFill) {
+          page.drawRectangle({
+            x: MARGIN + indent - 4,
+            y: cursorY - lineHeight + 3,
+            width: maxWidth + 8,
+            height: lineHeight,
+            color: opts.bgFill,
+          });
+        }
+        if (opts.leftAccent) {
+          page.drawRectangle({
+            x: MARGIN + indent - 4,
+            y: cursorY - lineHeight + 3,
+            width: 2.5,
+            height: lineHeight,
+            color: opts.leftAccent,
+          });
+        }
+        if (line) {
+          page.drawText(line, {
+            x: MARGIN + indent,
+            y: cursorY - size,
+            size,
+            font,
+            color,
+          });
+        }
+        cursorY -= lineHeight;
+      }
+    }
+  };
+
+  const drawTable = (tbl: ExportTable) => {
+    const colCount = Math.max(tbl.headers.length, ...tbl.rows.map((r) => r.length), 1);
+    const colWidth = CONTENT_WIDTH / colCount;
+    const cellFontSize = 8.5;
+    const cellLineHeight = 11.5;
+    const cellPad = 4;
+
+    const renderRow = (cells: string[], isHeader: boolean, rowIndex: number) => {
+      const wrappedCells = Array.from({ length: colCount }, (_, cIdx) => {
+        const safe = sanitizeForFont(cells[cIdx] ?? "", isUnicode);
+        return wrapLine(safe, isHeader ? boldFont : regularFont, cellFontSize, colWidth - cellPad * 2);
+      });
+      const maxLines = Math.max(...wrappedCells.map((lines) => lines.length), 1);
+      const rowHeight = maxLines * cellLineHeight + cellPad * 2;
+
+      if (cursorY - rowHeight < MARGIN + FOOTER_HEIGHT) {
+        page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+        cursorY = PAGE_HEIGHT - MARGIN;
+        if (!isHeader) {
+          renderRow(tbl.headers, true, -1);
+        }
+      }
+
+      const bgColor = isHeader
+        ? rgb(0.94, 0.96, 1.0)
+        : rowIndex % 2 === 1
+          ? rgb(0.98, 0.98, 0.99)
+          : rgb(1, 1, 1);
+
+      page.drawRectangle({
+        x: MARGIN,
+        y: cursorY - rowHeight,
+        width: CONTENT_WIDTH,
+        height: rowHeight,
+        color: bgColor,
+        borderColor: rgb(0.82, 0.84, 0.87),
+        borderWidth: 0.5,
+      });
+
+      for (let c = 0; c < colCount; c++) {
+        const cellX = MARGIN + c * colWidth;
+        if (c > 0) {
+          page.drawLine({
+            start: { x: cellX, y: cursorY },
+            end: { x: cellX, y: cursorY - rowHeight },
+            thickness: 0.5,
+            color: rgb(0.86, 0.88, 0.9),
+          });
+        }
+        const lines = wrappedCells[c] ?? [];
+        lines.forEach((line, lIdx) => {
+          page.drawText(line, {
+            x: cellX + cellPad,
+            y: cursorY - cellPad - cellFontSize - lIdx * cellLineHeight,
+            size: cellFontSize,
+            font: isHeader ? boldFont : regularFont,
+            color: rgb(0.12, 0.14, 0.16),
+          });
+        });
+      }
+      cursorY -= rowHeight;
+    };
+
+    if (tbl.title) {
+      drawWrapped(tbl.title, { font: boldFont, size: 9.5, lineGap: 4 });
+    }
+    renderRow(tbl.headers, true, -1);
+    tbl.rows.forEach((row, rIdx) => renderRow(row, false, rIdx));
+    cursorY -= 8;
+  };
+
+  // Document Title & Metadata
+  drawWrapped(title, { font: boldFont, size: 18, lineGap: 6, color: rgb(0.12, 0.14, 0.16) });
+  const metaParts = [`Exported: ${exportedAt.toLocaleString()}`];
+  if (metadata.workspaceName) metaParts.push(`Workspace: ${metadata.workspaceName}`);
+  if (metadata.capability) metaParts.push(`Capability: ${metadata.capability}`);
+  drawWrapped(metaParts.join("  |  "), {
+    font: regularFont,
+    size: 8.5,
+    color: rgb(0.4, 0.43, 0.46),
+    lineGap: 6,
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 15;
-  const contentWidth = pageWidth - 2 * margin;
+  ensureSpace(10);
+  page.drawLine({
+    start: { x: MARGIN, y: cursorY },
+    end: { x: PAGE_WIDTH - MARGIN, y: cursorY },
+    thickness: 0.75,
+    color: rgb(0.82, 0.84, 0.87),
+  });
+  cursorY -= 14;
 
-  let y = margin;
-
-  function checkPageBreak(neededHeight: number) {
-    if (y + neededHeight > pageHeight - margin - 10) {
-      doc.addPage();
-      y = margin;
-    }
-  }
-
-  // Document Title
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.setTextColor(31, 35, 40);
-  const title = metadata.title || "DeepTutor Conversation";
-  const titleLines = doc.splitTextToSize(title, contentWidth);
-  doc.text(titleLines, margin, y);
-  y += titleLines.length * 8 + 2;
-
-  // Metadata Line
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(101, 109, 118);
-  const dateStr = (metadata.exportedAt ?? new Date()).toLocaleString();
-  const metaText = `Exported: ${dateStr}${metadata.workspaceName ? ` | Workspace: ${metadata.workspaceName}` : ""}${metadata.capability ? ` | Capability: ${metadata.capability}` : ""}`;
-  doc.text(metaText, margin, y);
-  y += 6;
-
-  // Horizontal Divider
-  doc.setDrawColor(208, 215, 222);
-  doc.setLineWidth(0.4);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 8;
-
-  // Root Bookmark in PDF Reader Outline
-  const rootOutline = doc.outline?.add(null, title, { pageNumber: 1 });
-
-  let questionIndex = 0;
-
-  for (let mIdx = 0; mIdx < messages.length; mIdx++) {
-    const msg = messages[mIdx];
-    if (msg.role === "user" && !options.includeUserPrompts) {
-      continue;
-    }
-
+  for (const msg of messages) {
     const isUser = msg.role === "user";
-    const capBadge = msg.capability ? ` (${msg.capability})` : "";
+    if (isUser && !options.includeUserPrompts) continue;
 
-    if (isUser) {
-      questionIndex++;
-      const snippet = msg.content.trim().slice(0, 60).replace(/[\r\n]+/g, " ");
-      const bookmarkTitle = `Q${questionIndex}: ${snippet}${msg.content.length > 60 ? "…" : ""}`;
+    const speaker = isUser ? "YOU" : `DEEPTUTOR${msg.model ? ` [${msg.model}]` : ""}`;
+    ensureSpace(24);
+    drawWrapped(speaker, {
+      font: boldFont,
+      size: 10,
+      color: isUser ? rgb(0.04, 0.41, 0.85) : rgb(0.43, 0.25, 0.79),
+      bgFill: isUser ? rgb(0.94, 0.96, 1.0) : undefined,
+      leftAccent: isUser ? rgb(0.04, 0.41, 0.85) : undefined,
+      indent: isUser ? 6 : 0,
+      lineGap: 5,
+    });
 
-      // Add PDF Bookmark for this question turn
-      const currentPage = doc.getNumberOfPages();
-      if (doc.outline) {
-        doc.outline.add(rootOutline, bookmarkTitle, { pageNumber: currentPage });
-      }
-
-      // User Message Callout Card (Light blue tinted box with accent line)
-      const promptLines = doc.splitTextToSize(msg.content.trim(), contentWidth - 10);
-      const promptLineHeight = 4.2;
-      const promptUsable = pageHeight - 2 * margin - 10;
-      const promptLinesPerPage = Math.max(
-        1,
-        Math.floor((promptUsable - 14) / promptLineHeight),
-      );
-
-      // A prompt taller than one page must continue onto the next page. The
-      // previous single checkPageBreak drew the remainder past the page edge,
-      // where jsPDF discarded it without any error.
-      for (let start = 0; start < Math.max(promptLines.length, 1); start += promptLinesPerPage) {
-        const chunk = promptLines.slice(start, start + promptLinesPerPage);
-        const cardHeight = chunk.length * promptLineHeight + 9;
-        if (y + cardHeight + 4 > pageHeight - margin - 10) {
-          doc.addPage();
-          y = margin;
-        }
-
-        doc.setFillColor(240, 246, 255);
-        doc.roundedRect(margin, y, contentWidth, cardHeight, 1.5, 1.5, "F");
-
-        doc.setDrawColor(9, 105, 218);
-        doc.setLineWidth(1.2);
-        doc.line(margin, y, margin, y + cardHeight);
-
-        if (start === 0) {
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(7.5);
-          doc.setTextColor(9, 105, 218);
-          doc.text("YOU", margin + 5, y + 4.5);
-        }
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(31, 35, 40);
-        doc.text(chunk, margin + 5, y + 9);
-        y += cardHeight + 6;
-      }
-    } else {
-      // Assistant Response Header
-      checkPageBreak(12);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8.5);
-      doc.setTextColor(36, 41, 47);
-      doc.text("DEEPTUTOR", margin, y);
-
-      const assistantBadge = msg.model ? ` · ${msg.model}` : capBadge;
-      if (assistantBadge) {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7.5);
-        doc.setTextColor(101, 109, 118);
-        doc.text(`[${assistantBadge.trim()}]`, margin + 24, y);
-      }
-      y += 5;
+    if (options.includeThinking && msg.thinking) {
+      drawWrapped(`Reasoning: ${msg.thinking}`, {
+        font: regularFont,
+        size: 9,
+        color: rgb(0.35, 0.38, 0.42),
+        indent: 10,
+        bgFill: rgb(0.96, 0.94, 1.0),
+        leftAccent: rgb(0.51, 0.31, 0.87),
+        lineGap: 3.5,
+      });
+      cursorY -= 4;
     }
 
-    // Thinking / Chain of Thought
-    if (options.includeThinking && msg.thinking?.trim()) {
-      checkPageBreak(16);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(101, 109, 118);
-      doc.text("REASONING & THINKING PROCESS", margin + 4, y);
-      y += 4;
-
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(8);
-      doc.setTextColor(87, 96, 106);
-      const thinkingLines = doc.splitTextToSize(
-        msg.thinking.trim(),
-        contentWidth - 8,
-      );
-
-      for (const line of thinkingLines) {
-        checkPageBreak(4);
-        // Purple left bar
-        doc.setDrawColor(130, 80, 223);
-        doc.setLineWidth(0.8);
-        doc.line(margin + 1, y - 2.8, margin + 1, y + 1.2);
-
-        doc.text(line, margin + 5, y);
-        y += 3.8;
-      }
-      y += 3;
-    }
-
-    // Tool Invocations
-    if (options.includeToolCalls && msg.toolCalls?.length) {
-      for (const call of msg.toolCalls) {
-        checkPageBreak(10);
-        doc.setFont("courier", "bold");
-        doc.setFontSize(8);
-        doc.setTextColor(9, 105, 218);
-        doc.text(`Tool: ${call.name}`, margin + 3, y);
-        y += 4;
-
-        if (call.args && Object.keys(call.args).length > 0) {
-          const argText = JSON.stringify(call.args, null, 2);
-          const argLines = doc.splitTextToSize(argText, contentWidth - 8);
-          doc.setFont("courier", "normal");
-          doc.setFontSize(7.5);
-          doc.setTextColor(87, 96, 106);
-          for (const line of argLines.slice(0, 8)) {
-            checkPageBreak(3.5);
-            doc.text(line, margin + 5, y);
-            y += 3.5;
-          }
+    // Parse fenced code blocks vs prose
+    const lines = msg.content.replace(/\r\n/g, "\n").split("\n");
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i] ?? "";
+      const trimmed = line.trim();
+      if (trimmed.startsWith("```")) {
+        const lang = trimmed.slice(3).trim();
+        const codeLines: string[] = [];
+        i++;
+        while (i < lines.length && !(lines[i] ?? "").trim().startsWith("```")) {
+          codeLines.push(lines[i] ?? "");
+          i++;
         }
-
-        // Tool Results
-        if (options.includeToolResults && call.result?.trim()) {
-          checkPageBreak(8);
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(7.5);
-          doc.setTextColor(101, 109, 118);
-          doc.text("Result:", margin + 3, y);
-          y += 3.5;
-
-          const resLines = doc.splitTextToSize(
-            call.result.slice(0, 600),
-            contentWidth - 8,
-          );
-          doc.setFont("courier", "normal");
-          doc.setFontSize(7);
-          doc.setTextColor(36, 41, 47);
-          for (const line of resLines.slice(0, 6)) {
-            checkPageBreak(3.2);
-            doc.text(line, margin + 5, y);
-            y += 3.2;
-          }
+        i++;
+        if (lang) {
+          drawWrapped(lang.toUpperCase(), {
+            font: boldFont,
+            size: 8,
+            color: rgb(0.34, 0.38, 0.42),
+            indent: 8,
+            bgFill: rgb(0.92, 0.93, 0.95),
+            lineGap: 3,
+          });
         }
-        y += 2;
-      }
-    }
-
-    // Assistant Message Content (Parsed for code fences vs prose)
-    if (!isUser && msg.content?.trim()) {
-      const parts = msg.content.split(/(```[\s\S]*?```)/g);
-
-      for (const part of parts) {
-        if (part.startsWith("```") && part.endsWith("```")) {
-          // Code Block
-          const firstLineEnd = part.indexOf("\n");
-          const lang = part.slice(3, firstLineEnd).trim();
-          const code = part.slice(firstLineEnd + 1, -3);
-
-          const codeLines = doc.splitTextToSize(code, contentWidth - 10);
-          const lineHeight = 3.6;
-          const usable = pageHeight - 2 * margin - 10;
-          const linesPerPage = Math.max(1, Math.floor((usable - 12) / lineHeight));
-
-          // Paginate the block itself. Previously one page break was added and
-          // the remaining lines were drawn off-page and silently lost.
-          for (let start = 0; start < Math.max(codeLines.length, 1); start += linesPerPage) {
-            const chunk = codeLines.slice(start, start + linesPerPage);
-            const isFirst = start === 0;
-            const blockHeight = chunk.length * lineHeight + (isFirst && lang ? 8 : 6);
-
-            if (y + blockHeight + 4 > pageHeight - margin - 10) {
-              doc.addPage();
-              y = margin;
-            }
-
-            doc.setFillColor(246, 248, 250);
-            doc.setDrawColor(208, 215, 222);
-            doc.setLineWidth(0.3);
-            doc.roundedRect(margin, y, contentWidth, blockHeight, 1.5, 1.5, "FD");
-
-            if (isFirst && lang) {
-              doc.setFont("courier", "bold");
-              doc.setFontSize(7.5);
-              doc.setTextColor(87, 96, 106);
-              doc.text(lang.toUpperCase(), margin + 4, y + 4.5);
-            }
-
-            doc.setFont("courier", "normal");
-            doc.setFontSize(7.8);
-            doc.setTextColor(36, 41, 47);
-            doc.text(chunk, margin + 4, y + (isFirst && lang ? 8.5 : 5.5));
-            y += blockHeight + 4;
-          }
-        } else if (part.trim()) {
-          // Clean text paragraphs
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          doc.setTextColor(36, 41, 47);
-
-          const cleanContent = part
-            .replace(/`([^`]+)`/g, "$1")
-            .replace(/\*\*([^*]+)\*\*/g, "$1")
-            .replace(/\*([^*]+)\*/g, "$1");
-
-          const lines = doc.splitTextToSize(cleanContent.trim(), contentWidth);
-          for (const line of lines) {
-            checkPageBreak(4.5);
-            doc.text(line, margin, y);
-            y += 4.5;
-          }
-          y += 2;
-        }
-      }
-    }
-
-    // Tables using jspdf-autotable (Repeats column headers on every page!)
-    if (options.includeTables && msg.tables?.length) {
-      for (const tbl of msg.tables) {
-        checkPageBreak(18);
-        if (tbl.title) {
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(8.5);
-          doc.setTextColor(31, 35, 40);
-          doc.text(tbl.title, margin, y);
-          y += 4.5;
-        }
-
-        autoTable(doc, {
-          startY: y,
-          head: [tbl.headers],
-          body: tbl.rows,
-          margin: { left: margin, right: margin },
-          theme: "striped",
-          showHead: "everyPage", // Automatically repeats header across pages!
-          headStyles: {
-            fillColor: [31, 35, 40],
-            textColor: [255, 255, 255],
-            fontStyle: "bold",
-            fontSize: 8,
-            cellPadding: 2.2,
-          },
-          bodyStyles: {
-            fontSize: 7.8,
-            textColor: [36, 41, 47],
-            cellPadding: 2,
-            overflow: "linebreak",
-          },
-          alternateRowStyles: {
-            fillColor: [248, 250, 252],
-          },
+        drawWrapped(codeLines.join("\n"), {
+          font: monoFont,
+          size: 8.5,
+          color: rgb(0.14, 0.16, 0.18),
+          indent: 8,
+          bgFill: rgb(0.96, 0.97, 0.98),
+          leftAccent: rgb(0.82, 0.84, 0.87),
+          lineGap: 3,
         });
+        cursorY -= 4;
+        continue;
+      }
 
-        y = ((doc as any).lastAutoTable?.finalY ?? y) + 6;
-        // finalY is page-relative: a table that ends near the bottom would push
-        // the next block off-page.
-        if (y > pageHeight - margin - 10) {
-          doc.addPage();
-          y = margin;
+      if (trimmed.length > 0) {
+        drawWrapped(line, { font: regularFont, size: 10, lineGap: 4 });
+      } else {
+        cursorY -= 4;
+      }
+      i++;
+    }
+
+    if (options.includeTables && msg.tables && msg.tables.length > 0) {
+      cursorY -= 4;
+      for (const tbl of msg.tables) {
+        drawTable(tbl);
+      }
+    }
+
+    if (options.includeToolCalls && msg.toolCalls && msg.toolCalls.length > 0) {
+      for (const tc of msg.toolCalls) {
+        const args = tc.args ? ` ${JSON.stringify(tc.args)}` : "";
+        drawWrapped(`Tool: ${tc.name}${args}`, {
+          font: monoFont,
+          size: 8.5,
+          color: rgb(0.45, 0.32, 0.02),
+          indent: 8,
+          bgFill: rgb(1.0, 0.97, 0.77),
+          lineGap: 3,
+        });
+        if (options.includeToolResults && tc.result) {
+          drawWrapped(tc.result.slice(0, EXPORT_LIMITS.toolResult), {
+            font: monoFont,
+            size: 8,
+            color: rgb(0.34, 0.38, 0.42),
+            indent: 14,
+            lineGap: 3,
+          });
         }
       }
     }
 
-    // Citations & Sources
-    if (options.includeSources && msg.sources?.length) {
-      checkPageBreak(12);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(101, 109, 118);
-      doc.text("SOURCES & CITATIONS", margin, y);
-      y += 4;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.5);
-      doc.setTextColor(9, 105, 218);
+    if (options.includeSources && msg.sources && msg.sources.length > 0) {
+      drawWrapped("Sources & Citations", {
+        font: boldFont,
+        size: 9.5,
+        color: rgb(0.04, 0.41, 0.85),
+        lineGap: 3,
+      });
       for (const src of msg.sources) {
-        checkPageBreak(4);
-        const srcText = `[${src.index}] ${src.title} - ${src.url}`;
-        const srcLines = doc.splitTextToSize(srcText, contentWidth - 4);
-        doc.text(srcLines, margin + 2, y);
-        y += srcLines.length * 3.5;
+        const snippet = src.snippet ? ` — ${src.snippet.slice(0, EXPORT_LIMITS.sourceSnippet)}` : "";
+        drawWrapped(`• ${src.title || src.url} (${src.url})${snippet}`, {
+          font: regularFont,
+          size: 8.5,
+          color: rgb(0.34, 0.38, 0.42),
+          indent: 8,
+          lineGap: 3,
+        });
       }
-      y += 3;
     }
 
-    // Artifacts
-    if (options.includeArtifacts && msg.artifacts?.length) {
-      checkPageBreak(10);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(101, 109, 118);
-      doc.text("ATTACHED ARTIFACTS", margin, y);
-      y += 4;
-
+    if (options.includeArtifacts && msg.artifacts && msg.artifacts.length > 0) {
       for (const art of msg.artifacts) {
-        checkPageBreak(4);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(7.5);
-        doc.setTextColor(36, 41, 47);
-        doc.text(`• ${art.filename || art.type}${art.mime_type ? ` (${art.mime_type})` : ""}`, margin + 3, y);
-        y += 4;
+        const body = art.content ? `\n${art.content.slice(0, EXPORT_LIMITS.artifactText)}` : "";
+        drawWrapped(`Artifact: ${art.filename || art.type}${body}`, {
+          font: monoFont,
+          size: 8.5,
+          color: rgb(0.25, 0.28, 0.32),
+          indent: 8,
+          bgFill: rgb(0.96, 0.97, 0.98),
+          lineGap: 3,
+        });
       }
-      y += 3;
     }
 
-    // Turn separator
-    checkPageBreak(6);
-    doc.setDrawColor(234, 238, 242);
-    doc.setLineWidth(0.2);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 6;
+    cursorY -= 10;
   }
 
-  // Footer: Add Page Numbers to all pages
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(140, 149, 159);
-    doc.text(
-      `Page ${i} of ${totalPages}`,
-      pageWidth / 2,
-      pageHeight - 8,
-      { align: "center" },
-    );
-  }
+  // Page numbers footer
+  const pages = pdfDoc.getPages();
+  const totalPages = pages.length;
+  pages.forEach((p, idx) => {
+    const label = `Page ${idx + 1} / ${totalPages}`;
+    const width = regularFont.widthOfTextAtSize(label, 8);
+    p.drawText(label, {
+      x: PAGE_WIDTH - MARGIN - width,
+      y: MARGIN / 2,
+      size: 8,
+      font: regularFont,
+      color: rgb(0.45, 0.48, 0.52),
+    });
+  });
 
-  return doc.output("blob");
+  const pdfBytes = await pdfDoc.save();
+  const copy = new Uint8Array(pdfBytes.byteLength);
+  copy.set(pdfBytes);
+  return new Blob([copy], { type: "application/pdf" });
 }

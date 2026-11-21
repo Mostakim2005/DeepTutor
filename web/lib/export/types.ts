@@ -119,6 +119,8 @@ export interface ExportMetadata {
   exportedAt?: Date;
   modelName?: string;
   capability?: string;
+  /** Optional TrueType/OpenType Unicode font bytes for pdf-lib + fontkit subsetting. */
+  unicodeFontBytes?: Uint8Array;
 }
 
 export interface ExportResult {
