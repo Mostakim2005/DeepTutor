@@ -1,170 +1,360 @@
 /**
- * Pure TypeScript Word (.docx) generator.
- * Builds valid Office Open XML (WordprocessingML) directly with OMML math support,
- * native Word tables, syntax-colored code, and thinking/tool callouts.
+ * Word (.docx) generator built on `dolanmiu/docx` (OSS-01 / SUN-01).
+ *
+ * Replaces the hand-rolled OOXML/ZIP serializer while preserving OMML math
+ * equations (via KaTeX MathML -> `omml.ts` -> `ImportedXmlComponent`),
+ * native Word tables with repeating headers, styled dialogue cards, code
+ * blocks, and shared `EXPORT_LIMITS`.
  */
 
+import {
+  AlignmentType,
+  BorderStyle,
+  Document,
+  ExternalHyperlink,
+  HeadingLevel,
+  ImportedXmlComponent,
+  Packer,
+  Paragraph,
+  ShadingType,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  WidthType,
+  type ParagraphChild,
+} from "docx";
 import katex from "katex";
-import { createZipBlob, type ZipEntry } from "./zip";
 import { mathMlToOmml, OMML_NAMESPACE } from "./omml";
-import type {
-  ExportFilterOptions,
-  ExportMetadata,
-  NormalizedExportMessage,
+import {
+  EXPORT_LIMITS,
+  type ExportFilterOptions,
+  type ExportMetadata,
+  type ExportTable,
+  type NormalizedExportMessage,
 } from "./types";
-
-const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
 const INVALID_XML_RE =
   /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
-function escapeXml(text: string): string {
-  return text
-    .replace(INVALID_XML_RE, "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+function cleanText(text: string): string {
+  return (text || "").replace(INVALID_XML_RE, "");
 }
 
-function renderLatexToOmml(latex: string): string | null {
+function renderLatexToOmmlComponent(latex: string): ImportedXmlComponent | null {
   try {
     const mathMl = katex.renderToString(latex, {
       output: "mathml",
       throwOnError: false,
     });
-    return mathMlToOmml(mathMl);
+    const omml = mathMlToOmml(mathMl);
+    if (!omml) return null;
+    const withNs = omml.includes("xmlns:m=")
+      ? omml
+      : omml.replace("<m:oMath>", `<m:oMath xmlns:m="${OMML_NAMESPACE}">`);
+    return ImportedXmlComponent.fromXmlString(withNs);
   } catch {
     return null;
   }
 }
 
-/** Converts inline markdown (bold, italic, code, links, inline math) to Word runs */
-function parseInlineToWord(text: string): string {
-  const runs: string[] = [];
-  // Tokenize inline markdown & LaTeX: $...$, **bold**, *italic*, `code`, [text](url)
+function safeUrl(raw: string): string | null {
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:") {
+      return parsed.href;
+    }
+  } catch {
+    /* ignore invalid URLs */
+  }
+  return null;
+}
+
+function parseInlineToChildren(text: string): ParagraphChild[] {
+  const children: ParagraphChild[] = [];
   const pattern =
-    /(\$\$[\s\S]+?\$\$|\$[^\$\n]+?\$|(?:\*\*|__)(.*?)(?:\*\*|__)|(?:\*|_)(.*?)(?:\*|_)|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\))/g;
+    /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|(?:\*\*|__)(.*?)(?:\*\*|__)|(?:\*|_)(.*?)(?:\*|_)|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\))/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      const plain = text.slice(lastIndex, match.index);
-      runs.push(`<w:r><w:t xml:space="preserve">${escapeXml(plain)}</w:t></w:r>`);
+      children.push(new TextRun({ text: cleanText(text.slice(lastIndex, match.index)) }));
     }
 
     const token = match[0];
     if (token.startsWith("$$") && token.endsWith("$$")) {
       const latex = token.slice(2, -2).trim();
-      const omml = renderLatexToOmml(latex);
-      if (omml) {
-        runs.push(`<m:oMathPara>${omml}</m:oMathPara>`);
+      const ommlComp = renderLatexToOmmlComponent(latex);
+      if (ommlComp) {
+        children.push(ommlComp as unknown as ParagraphChild);
       } else {
-        runs.push(`<w:r><w:t xml:space="preserve">${escapeXml(token)}</w:t></w:r>`);
+        children.push(new TextRun({ text: cleanText(latex), font: "Cambria Math", italics: true }));
       }
-    } else if (token.startsWith("$") && token.endsWith("$") && !token.includes("$$")) {
+    } else if (token.startsWith("$") && token.endsWith("$")) {
       const latex = token.slice(1, -1).trim();
-      const omml = renderLatexToOmml(latex);
-      if (omml) {
-        runs.push(omml);
+      const ommlComp = renderLatexToOmmlComponent(latex);
+      if (ommlComp) {
+        children.push(ommlComp as unknown as ParagraphChild);
       } else {
-        runs.push(`<w:r><w:t xml:space="preserve">${escapeXml(token)}</w:t></w:r>`);
+        children.push(new TextRun({ text: cleanText(latex), font: "Cambria Math", italics: true }));
       }
-    } else if (match[2]) {
-      // Bold
-      runs.push(
-        `<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t xml:space="preserve">${escapeXml(match[2])}</w:t></w:r>`,
+    } else if (match[2] !== undefined) {
+      children.push(new TextRun({ text: cleanText(match[2]), bold: true }));
+    } else if (match[3] !== undefined) {
+      children.push(new TextRun({ text: cleanText(match[3]), italics: true }));
+    } else if (match[4] !== undefined) {
+      children.push(
+        new TextRun({
+          text: cleanText(match[4]),
+          font: "Consolas",
+          size: 19,
+          shading: { type: ShadingType.CLEAR, color: "auto", fill: "EFF1F3" },
+        }),
       );
-    } else if (match[3]) {
-      // Italic
-      runs.push(
-        `<w:r><w:rPr><w:i/><w:iCs/></w:rPr><w:t xml:space="preserve">${escapeXml(match[3])}</w:t></w:r>`,
-      );
-    } else if (match[4]) {
-      // Inline code
-      runs.push(
-        `<w:r><w:rPr><w:rStyle w:val="CodeChar"/></w:rPr><w:t xml:space="preserve">${escapeXml(match[4])}</w:t></w:r>`,
-      );
-    } else if (match[5] && match[6]) {
-      // Link
-      runs.push(
-        `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${escapeXml(match[5])}</w:t></w:r>`,
-      );
+    } else if (match[5] !== undefined && match[6] !== undefined) {
+      const href = safeUrl(match[6]);
+      if (href) {
+        children.push(
+          new ExternalHyperlink({
+            link: href,
+            children: [
+              new TextRun({
+                text: cleanText(match[5]),
+                style: "Hyperlink",
+                color: "0969DA",
+                underline: {},
+              }),
+            ],
+          }),
+        );
+      } else {
+        children.push(new TextRun({ text: cleanText(match[5]) }));
+      }
     }
 
     lastIndex = pattern.lastIndex;
   }
 
   if (lastIndex < text.length) {
-    const plain = text.slice(lastIndex);
-    runs.push(`<w:r><w:t xml:space="preserve">${escapeXml(plain)}</w:t></w:r>`);
+    children.push(new TextRun({ text: cleanText(text.slice(lastIndex)) }));
   }
-
-  return runs.join("");
+  if (children.length === 0) {
+    children.push(new TextRun({ text: "" }));
+  }
+  return children;
 }
 
-function paragraph(content: string, style?: string): string {
-  const pPr = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
-  return `<w:p>${pPr}${content}</w:p>`;
-}
+function buildWordTable(tbl: ExportTable): Table {
+  const colCount = Math.max(
+    tbl.headers.length,
+    ...tbl.rows.map((r) => r.length),
+    1,
+  );
+  const colPct = Math.floor(100 / colCount);
 
-function codeBlock(code: string, language?: string): string {
-  const lines = code.split("\n");
-  const langLabel = (language || "CODE").toUpperCase();
-  const BORDER_BOX = '<w:pBdr><w:left w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/><w:right w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/></w:pBdr>';
-  const SHADING = '<w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/>';
-  const INDENT = '<w:ind w:left="140" w:right="140"/>';
-
-  const header = `<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="6" w:space="4" w:color="D0D7DE"/><w:left w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/><w:right w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/><w:bottom w:val="single" w:sz="4" w:space="4" w:color="D0D7DE"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="EAEEF2"/>${INDENT}<w:spacing w:before="140" w:after="20"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:b/><w:sz w:val="16"/><w:color w:val="57606A"/></w:rPr><w:t>${escapeXml(langLabel)}</w:t></w:r></w:p>`;
-
-  const paragraphs = lines.map((line, idx) => {
-    const isLast = idx === lines.length - 1;
-    const borderBottom = isLast
-      ? '<w:bottom w:val="single" w:sz="6" w:space="4" w:color="D0D7DE"/>'
-      : '<w:bottom w:val="none"/>';
-    return (
-      `<w:p><w:pPr><w:pBdr><w:left w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/><w:right w:val="single" w:sz="6" w:space="8" w:color="D0D7DE"/>${borderBottom}</w:pBdr>${SHADING}${INDENT}<w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>` +
-      `<w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="18"/><w:color w:val="24292F"/></w:rPr>` +
-      `<w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`
-    );
+  const headerRow = new TableRow({
+    tableHeader: true,
+    cantSplit: true,
+    children: Array.from({ length: colCount }, (_, idx) => {
+      const cellText = cleanText(tbl.headers[idx] ?? "");
+      return new TableCell({
+        width: { size: colPct, type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: "F0F6FF" },
+        children: [
+          new Paragraph({
+            spacing: { before: 60, after: 60 },
+            children: [new TextRun({ text: cellText, bold: true, size: 20, color: "1F2328" })],
+          }),
+        ],
+      });
+    }),
   });
 
-  return header + paragraphs.join("") + `<w:p><w:pPr><w:spacing w:after="100"/></w:pPr></w:p>`;
+  const bodyRows = tbl.rows.map(
+    (row, rIdx) =>
+      new TableRow({
+        cantSplit: true,
+        children: Array.from({ length: colCount }, (_, idx) => {
+          const cellText = cleanText(row[idx] ?? "");
+          return new TableCell({
+            width: { size: colPct, type: WidthType.PERCENTAGE },
+            shading:
+              rIdx % 2 === 1
+                ? { type: ShadingType.CLEAR, color: "auto", fill: "F9FAFB" }
+                : undefined,
+            children: [
+              new Paragraph({
+                spacing: { before: 50, after: 50 },
+                children: parseInlineToChildren(cellText),
+              }),
+            ],
+          });
+        }),
+      }),
+  );
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 4, color: "D0D7DE" },
+      bottom: { style: BorderStyle.SINGLE, size: 4, color: "D0D7DE" },
+      left: { style: BorderStyle.SINGLE, size: 4, color: "D0D7DE" },
+      right: { style: BorderStyle.SINGLE, size: 4, color: "D0D7DE" },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+      insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "E5E7EB" },
+    },
+    rows: [headerRow, ...bodyRows],
+  });
 }
 
-function wordTable(headers: string[], rows: string[][]): string {
-  const BORDER = '<w:tcBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="D0D7DE"/><w:left w:val="single" w:sz="4" w:space="0" w:color="D0D7DE"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="D0D7DE"/><w:right w:val="single" w:sz="4" w:space="0" w:color="D0D7DE"/></w:tcBorders>';
-  const CELL_MAR = '<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
-
-  const headerXml = headers.length
-    ? `<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>${headers
-        .map(
-          (h) =>
-            `<w:tc><w:tcPr>${BORDER}<w:shd w:val="clear" w:color="auto" w:fill="EAEEF2"/>${CELL_MAR}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F2328"/><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(h)}</w:t></w:r></w:p></w:tc>`,
-        )
-        .join("")}</w:tr>`
-    : "";
-
-  const rowsXml = rows
-    .map((row, rIdx) => {
-      const fill = rIdx % 2 === 1 ? "F8F9FA" : "FFFFFF";
-      return `<w:tr><w:trPr><w:cantSplit/></w:trPr>${row
-        .map(
-          (c) =>
-            `<w:tc><w:tcPr>${BORDER}<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>${CELL_MAR}</w:tcPr><w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:rPr><w:sz w:val="19"/><w:color w:val="24292F"/></w:rPr><w:t>${escapeXml(c)}</w:t></w:r></w:p></w:tc>`,
-        )
-        .join("")}</w:tr>`;
-    })
-    .join("");
-
-  return (
-    `<w:tbl><w:tblPr><w:tblStyle w:val="TableNormal"/><w:tblW w:w="0" w:type="auto"/><w:tblLook w:val="04A0"/><w:tblLayout w:type="fixed"/></w:tblPr>` +
-    headerXml +
-    rowsXml +
-    `</w:tbl><w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>`
+function buildCodeBlockParagraphs(lang: string, codeLines: string[]): Paragraph[] {
+  const blocks: Paragraph[] = [];
+  if (lang) {
+    blocks.push(
+      new Paragraph({
+        spacing: { before: 120, after: 20 },
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: "EAEEF2" },
+        border: { left: { style: BorderStyle.SINGLE, size: 18, color: "57606A" } },
+        indent: { left: 140 },
+        children: [
+          new TextRun({
+            text: cleanText(lang.toUpperCase()),
+            font: "Consolas",
+            size: 16,
+            bold: true,
+            color: "57606A",
+          }),
+        ],
+      }),
+    );
+  }
+  const codeText = cleanText(codeLines.join("\n"));
+  blocks.push(
+    new Paragraph({
+      spacing: { before: lang ? 0 : 100, after: 120 },
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: "F6F8FA" },
+      border: { left: { style: BorderStyle.SINGLE, size: 18, color: "D0D7DE" } },
+      indent: { left: 140 },
+      children: codeText.split("\n").map(
+        (line, idx) =>
+          new TextRun({
+            text: line,
+            font: "Consolas",
+            size: 18,
+            color: "24292F",
+            break: idx > 0 ? 1 : 0,
+          }),
+      ),
+    }),
   );
+  return blocks;
+}
+
+function markdownBodyToBlocks(content: string): Array<Paragraph | Table> {
+  const blocks: Array<Paragraph | Table> = [];
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      const lang = trimmed.slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !(lines[i] ?? "").trim().startsWith("```")) {
+        codeLines.push(lines[i] ?? "");
+        i++;
+      }
+      i++; // consume closing fence
+      blocks.push(...buildCodeBlockParagraphs(lang, codeLines));
+      continue;
+    }
+
+    if (trimmed.startsWith("$$") && !trimmed.slice(2).includes("$$")) {
+      const mathLines: string[] = [trimmed.slice(2)];
+      i++;
+      while (i < lines.length && !(lines[i] ?? "").trim().endsWith("$$")) {
+        mathLines.push(lines[i] ?? "");
+        i++;
+      }
+      if (i < lines.length) {
+        mathLines.push((lines[i] ?? "").trim().replace(/\$\$$/, ""));
+        i++;
+      }
+      const latex = mathLines.join("\n").trim();
+      const ommlComp = renderLatexToOmmlComponent(latex);
+      blocks.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 120, after: 120 },
+          children: ommlComp
+            ? [ommlComp as unknown as ParagraphChild]
+            : [new TextRun({ text: cleanText(latex), font: "Cambria Math", italics: true })],
+        }),
+      );
+      continue;
+    }
+
+    const headingMatch = /^(#{1,4})\s+(.+)$/.exec(trimmed);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const headingMap = [
+        HeadingLevel.HEADING_1,
+        HeadingLevel.HEADING_2,
+        HeadingLevel.HEADING_3,
+        HeadingLevel.HEADING_4,
+      ];
+      blocks.push(
+        new Paragraph({
+          heading: headingMap[level - 1] ?? HeadingLevel.HEADING_4,
+          spacing: { before: 160, after: 80 },
+          children: parseInlineToChildren(headingMatch[2]),
+        }),
+      );
+      i++;
+      continue;
+    }
+
+    if (trimmed.startsWith("> ")) {
+      blocks.push(
+        new Paragraph({
+          spacing: { before: 60, after: 60 },
+          indent: { left: 260 },
+          border: { left: { style: BorderStyle.SINGLE, size: 18, color: "D0D7DE" } },
+          children: parseInlineToChildren(trimmed.slice(2)),
+        }),
+      );
+      i++;
+      continue;
+    }
+
+    if (/^[-*+]\s+/.test(trimmed)) {
+      blocks.push(
+        new Paragraph({
+          bullet: { level: 0 },
+          spacing: { before: 40, after: 40 },
+          children: parseInlineToChildren(trimmed.replace(/^[-*+]\s+/, "")),
+        }),
+      );
+      i++;
+      continue;
+    }
+
+    if (trimmed.length > 0) {
+      blocks.push(
+        new Paragraph({
+          spacing: { before: 60, after: 80 },
+          children: parseInlineToChildren(line),
+        }),
+      );
+    }
+    i++;
+  }
+
+  return blocks;
 }
 
 export async function buildDocxBlob(
@@ -172,288 +362,198 @@ export async function buildDocxBlob(
   options: ExportFilterOptions,
   metadata: ExportMetadata,
 ): Promise<Blob> {
-  const bodyXml: string[] = [];
+  const children: Array<Paragraph | Table> = [];
+  const docTitle = cleanText(metadata.title || "DeepTutor Conversation");
+  const exportedAt = metadata.exportedAt ?? new Date();
 
-  // Document Title
-  bodyXml.push(
-    `<w:p><w:pPr><w:pStyle w:val="Title"/><w:spacing w:before="0" w:after="160"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="48"/><w:color w:val="1F2328"/></w:rPr><w:t>${escapeXml(metadata.title || "DeepTutor Conversation")}</w:t></w:r></w:p>`,
+  children.push(
+    new Paragraph({
+      heading: HeadingLevel.TITLE,
+      spacing: { after: 80 },
+      children: [new TextRun({ text: docTitle, bold: true, size: 36, color: "1F2328" })],
+    }),
   );
 
-  // Document Subtitle / Metadata
-  const dateStr = (metadata.exportedAt ?? new Date()).toLocaleString();
-  const subMeta = [
-    `Exported: ${dateStr}`,
-    metadata.workspaceName ? `Workspace: ${metadata.workspaceName}` : null,
-    metadata.capability ? `Capability: ${metadata.capability}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  bodyXml.push(
-    `<w:p><w:pPr><w:pStyle w:val="Subtitle"/><w:spacing w:after="240"/></w:pPr><w:r><w:rPr><w:color w:val="656D76"/><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(subMeta)}</w:t></w:r></w:p>`,
+  const metaParts = [`Exported: ${exportedAt.toLocaleString()}`];
+  if (metadata.workspaceName) metaParts.push(`Workspace: ${metadata.workspaceName}`);
+  if (metadata.capability) metaParts.push(`Capability: ${metadata.capability}`);
+  children.push(
+    new Paragraph({
+      spacing: { after: 200 },
+      border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "D0D7DE" } },
+      children: [
+        new TextRun({
+          text: cleanText(metaParts.join("  |  ")),
+          size: 18,
+          color: "656D76",
+        }),
+      ],
+    }),
   );
 
-  // Table of Contents Page
-  bodyXml.push(
-    `<w:p><w:pPr><w:pStyle w:val="TOCHeading"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1F2328"/></w:rPr><w:t>Table of Contents</w:t></w:r></w:p>`,
-    `<w:p><w:pPr><w:spacing w:after="200"/></w:pPr><w:fldSimple w:instr="TOC \\o &quot;1-2&quot; \\h \\z \\u"><w:r><w:rPr><w:color w:val="0969DA"/><w:sz w:val="20"/></w:rPr><w:t>Table of Contents</w:t></w:r></w:fldSimple></w:p>`,
-    `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`,
-  );
-
-  let questionIndex = 0;
-
-  for (let mIdx = 0; mIdx < messages.length; mIdx++) {
-    const msg = messages[mIdx];
-    if (msg.role === "user" && !options.includeUserPrompts) {
-      continue;
-    }
-
+  for (const msg of messages) {
     const isUser = msg.role === "user";
-    const capBadge = msg.capability ? ` (${msg.capability})` : "";
-    const turnBookmark = `turn_${mIdx + 1}`;
+    if (isUser && !options.includeUserPrompts) continue;
 
-    if (isUser) {
-      questionIndex++;
-      const snippet = msg.content.trim().slice(0, 80).replace(/[\r\n]+/g, " ");
-      const tocHeading = `Question ${questionIndex}: ${snippet}${msg.content.length > 80 ? "…" : ""}`;
+    const speakerLabel = isUser
+      ? "YOU"
+      : `DEEPTUTOR${msg.model ? ` [${msg.model}]` : ""}`;
 
-      // Navigation Pane Heading 1 anchor
-      bodyXml.push(
-        `<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:before="240" w:after="60"/></w:pPr>` +
-          `<w:bookmarkStart w:id="${questionIndex}" w:name="${turnBookmark}"/>` +
-          `<w:r><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="0969DA"/></w:rPr><w:t>${escapeXml(tocHeading)}</w:t></w:r>` +
-          `<w:bookmarkEnd w:id="${questionIndex}"/></w:p>`,
-      );
+    children.push(
+      new Paragraph({
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 220, after: 80 },
+        shading: isUser
+          ? { type: ShadingType.CLEAR, color: "auto", fill: "F0F6FF" }
+          : undefined,
+        border: isUser
+          ? { left: { style: BorderStyle.SINGLE, size: 24, color: "0969DA" } }
+          : undefined,
+        indent: isUser ? { left: 140 } : undefined,
+        children: [
+          new TextRun({
+            text: cleanText(speakerLabel),
+            bold: true,
+            size: 20,
+            color: isUser ? "0969DA" : "6E40C9",
+          }),
+        ],
+      }),
+    );
 
-      // Clean User Callout Card (Shaded container, no redundant "User Answer")
-      const userLines = msg.content.trim().split("\n");
-      const BORDER_LEFT = '<w:pBdr><w:left w:val="single" w:sz="24" w:space="12" w:color="0969DA"/><w:top w:val="none"/><w:right w:val="none"/><w:bottom w:val="none"/></w:pBdr>';
-      const SHADING = '<w:shd w:val="clear" w:color="auto" w:fill="F0F6FF"/>';
-      const INDENT = '<w:ind w:left="180" w:right="180"/>';
-
-      bodyXml.push(
-        `<w:p><w:pPr>${BORDER_LEFT}${SHADING}${INDENT}<w:spacing w:before="80" w:after="40"/></w:pPr>` +
-          `<w:r><w:rPr><w:b/><w:sz w:val="17"/><w:color w:val="0969DA"/></w:rPr><w:t>YOU</w:t></w:r></w:p>`,
-      );
-
-      for (const line of userLines) {
-        if (!line.trim()) continue;
-        bodyXml.push(
-          `<w:p><w:pPr>${BORDER_LEFT}${SHADING}${INDENT}<w:spacing w:after="60"/></w:pPr>` +
-            parseInlineToWord(line) +
-            `</w:p>`,
-        );
-      }
-      bodyXml.push(`<w:p><w:pPr><w:spacing w:after="140"/></w:pPr></w:p>`);
-    } else {
-      // Assistant Response Header
-      const assistantBadge = msg.model ? ` · ${msg.model}` : capBadge;
-      bodyXml.push(
-        `<w:p><w:pPr><w:spacing w:before="180" w:after="60"/></w:pPr>` +
-          `<w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="24292F"/></w:rPr><w:t>DEEPTUTOR</w:t></w:r>` +
-          (assistantBadge
-            ? `<w:r><w:rPr><w:color w:val="57606A"/><w:sz w:val="16"/></w:rPr><w:t xml:space="preserve"> [${escapeXml(assistantBadge.trim())}]</w:t></w:r>`
-            : "") +
-          `</w:p>`,
+    if (options.includeThinking && msg.thinking) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 60, after: 80 },
+          shading: { type: ShadingType.CLEAR, color: "auto", fill: "F5F0FF" },
+          border: { left: { style: BorderStyle.SINGLE, size: 18, color: "8250DF" } },
+          indent: { left: 160 },
+          children: [
+            new TextRun({ text: "Reasoning: ", bold: true, size: 18, color: "6E40C9" }),
+            new TextRun({ text: cleanText(msg.thinking), italics: true, size: 18, color: "57606A" }),
+          ],
+        }),
       );
     }
 
-    // Chain-of-thought / Thinking
-    if (options.includeThinking && msg.thinking?.trim()) {
-      bodyXml.push(
-        `<w:p><w:pPr><w:pStyle w:val="ThinkingLabel"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="8250DF"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/><w:spacing w:before="120" w:after="40"/></w:pPr>` +
-          `<w:r><w:rPr><w:b/><w:color w:val="656D76"/><w:sz w:val="18"/></w:rPr><w:t>THINKING &amp; REASONING PROCESS</w:t></w:r></w:p>`,
-      );
-
-      const thinkingLines = msg.thinking.trim().split("\n");
-      for (const line of thinkingLines) {
-        if (!line.trim()) continue;
-        bodyXml.push(
-          `<w:p><w:pPr><w:pStyle w:val="Thinking"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="8250DF"/></w:pPr><w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/><w:ind w:left="240"/><w:spacing w:after="60"/></w:pPr>` +
-            parseInlineToWord(line) +
-            `</w:p>`,
-        );
-      }
+    if (msg.content.trim()) {
+      children.push(...markdownBodyToBlocks(msg.content));
     }
 
-    // Tool Invocations
-    if (options.includeToolCalls && msg.toolCalls?.length) {
-      for (const call of msg.toolCalls) {
-        const argStr = call.args ? JSON.stringify(call.args, null, 2) : "";
-        bodyXml.push(
-          `<w:p><w:pPr><w:pStyle w:val="ToolCall"/><w:pBdr><w:left w:val="single" w:sz="14" w:space="8" w:color="0969DA"/><w:top w:val="single" w:sz="4" w:space="4" w:color="D0D7DE"/><w:right w:val="single" w:sz="4" w:space="4" w:color="D0D7DE"/><w:bottom w:val="single" w:sz="4" w:space="4" w:color="D0D7DE"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="F0F6FF"/><w:spacing w:before="100" w:after="40"/></w:pPr>` +
-            `<w:r><w:rPr><w:b/><w:rFonts w:ascii="Consolas"/><w:color w:val="0969DA"/><w:sz w:val="18"/></w:rPr><w:t>TOOL CALL: ${escapeXml(call.name)}</w:t></w:r></w:p>`,
-        );
-
-        if (argStr && argStr !== "{}") {
-          bodyXml.push(codeBlock(argStr, "json"));
-        }
-
-        // Tool Results
-        if (options.includeToolResults && call.result?.trim()) {
-          bodyXml.push(
-            `<w:p><w:pPr><w:spacing w:before="60" w:after="40"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="57606A"/></w:rPr><w:t>Tool Result:</w:t></w:r></w:p>`,
-          );
-          bodyXml.push(codeBlock(call.result.slice(0, 3000)));
-        }
-      }
-    }
-
-    // Message Content
-    if (msg.content?.trim()) {
-      // Split into paragraphs / code fences
-      const parts = msg.content.split(/(```[\s\S]*?```)/g);
-      for (const part of parts) {
-        if (part.startsWith("```") && part.endsWith("```")) {
-          const firstLineEnd = part.indexOf("\n");
-          const lang = part.slice(3, firstLineEnd).trim();
-          const code = part.slice(firstLineEnd + 1, -3);
-          bodyXml.push(codeBlock(code, lang));
-        } else {
-          const lines = part.split("\n\n");
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            // Check if heading
-            if (trimmed.startsWith("### ")) {
-              bodyXml.push(
-                paragraph(
-                  parseInlineToWord(trimmed.slice(4)),
-                  "Heading3",
-                ),
-              );
-            } else if (trimmed.startsWith("## ")) {
-              bodyXml.push(
-                paragraph(
-                  parseInlineToWord(trimmed.slice(3)),
-                  "Heading2",
-                ),
-              );
-            } else if (trimmed.startsWith("# ")) {
-              bodyXml.push(
-                paragraph(
-                  parseInlineToWord(trimmed.slice(2)),
-                  "Heading1",
-                ),
-              );
-            } else if (trimmed.startsWith("> ")) {
-              bodyXml.push(
-                paragraph(
-                  parseInlineToWord(trimmed.slice(2)),
-                  "Quote",
-                ),
-              );
-            } else {
-              bodyXml.push(paragraph(parseInlineToWord(trimmed)));
-            }
-          }
-        }
-      }
-    }
-
-    // Tables
-    if (options.includeTables && msg.tables?.length) {
+    if (options.includeTables && msg.tables && msg.tables.length > 0) {
       for (const tbl of msg.tables) {
         if (tbl.title) {
-          bodyXml.push(paragraph(escapeXml(tbl.title), "Heading3"));
+          children.push(
+            new Paragraph({
+              spacing: { before: 120, after: 40 },
+              children: [new TextRun({ text: cleanText(tbl.title), bold: true, size: 20 })],
+            }),
+          );
         }
-        bodyXml.push(wordTable(tbl.headers, tbl.rows));
+        children.push(buildWordTable(tbl));
+        children.push(new Paragraph({ spacing: { after: 80 }, children: [] }));
       }
     }
 
-    // Citations & Sources
-    if (options.includeSources && msg.sources?.length) {
-      bodyXml.push(
-        `<w:p><w:pPr><w:pStyle w:val="Heading4"/><w:spacing w:before="120" w:after="40"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="57606A"/><w:sz w:val="18"/></w:rPr><w:t>SOURCES &amp; CITATIONS</w:t></w:r></w:p>`,
+    if (options.includeToolCalls && msg.toolCalls && msg.toolCalls.length > 0) {
+      for (const tc of msg.toolCalls) {
+        const argText = tc.args ? JSON.stringify(tc.args) : "";
+        children.push(
+          new Paragraph({
+            spacing: { before: 60, after: 40 },
+            shading: { type: ShadingType.CLEAR, color: "auto", fill: "FFF8C5" },
+            indent: { left: 140 },
+            children: [
+              new TextRun({ text: `Tool: ${cleanText(tc.name)}`, bold: true, font: "Consolas", size: 18 }),
+              ...(argText
+                ? [new TextRun({ text: `  ${cleanText(argText)}`, font: "Consolas", size: 17, color: "57606A" })]
+                : []),
+            ],
+          }),
+        );
+        if (options.includeToolResults && tc.result) {
+          const clipped = cleanText(tc.result).slice(0, EXPORT_LIMITS.toolResult);
+          children.push(
+            new Paragraph({
+              spacing: { before: 20, after: 80 },
+              indent: { left: 220 },
+              children: [new TextRun({ text: clipped, font: "Consolas", size: 17, color: "57606A" })],
+            }),
+          );
+        }
+      }
+    }
+
+    if (options.includeSources && msg.sources && msg.sources.length > 0) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 100, after: 40 },
+          children: [new TextRun({ text: "Sources & Citations", bold: true, size: 19, color: "0969DA" })],
+        }),
       );
       for (const src of msg.sources) {
-        bodyXml.push(
-          `<w:p><w:pPr><w:pStyle w:val="SourceItem"/><w:ind w:left="480"/><w:spacing w:after="40"/></w:pPr>` +
-            `<w:r><w:rPr><w:b/><w:color w:val="0969DA"/></w:rPr><w:t>[${src.index}] </w:t></w:r>` +
-            `<w:r><w:t xml:space="preserve">${escapeXml(src.title)} - </w:t></w:r>` +
-            `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>${escapeXml(src.url)}</w:t></w:r></w:p>`,
+        const snippet = src.snippet ? ` — ${cleanText(src.snippet).slice(0, EXPORT_LIMITS.sourceSnippet)}` : "";
+        const href = safeUrl(src.url);
+        children.push(
+          new Paragraph({
+            bullet: { level: 0 },
+            spacing: { before: 20, after: 20 },
+            children: [
+              ...(href
+                ? [
+                    new ExternalHyperlink({
+                      link: href,
+                      children: [
+                        new TextRun({
+                          text: cleanText(src.title || src.url),
+                          style: "Hyperlink",
+                          color: "0969DA",
+                          underline: {},
+                          size: 18,
+                        }),
+                      ],
+                    }),
+                  ]
+                : [new TextRun({ text: cleanText(src.title || src.url), size: 18 })]),
+              ...(snippet ? [new TextRun({ text: snippet, size: 18, color: "57606A" })] : []),
+            ],
+          }),
         );
       }
     }
 
-    // Artifacts
-    if (options.includeArtifacts && msg.artifacts?.length) {
-      bodyXml.push(
-        `<w:p><w:pPr><w:pStyle w:val="Heading4"/><w:spacing w:before="120" w:after="40"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="57606A"/><w:sz w:val="18"/></w:rPr><w:t>ATTACHED ARTIFACTS</w:t></w:r></w:p>`,
-      );
+    if (options.includeArtifacts && msg.artifacts && msg.artifacts.length > 0) {
       for (const art of msg.artifacts) {
-        const name = art.filename || art.type;
-        bodyXml.push(
-          `<w:p><w:pPr><w:ind w:left="480"/><w:spacing w:after="40"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>• ${escapeXml(name)}</w:t></w:r>${art.mime_type ? `<w:r><w:t xml:space="preserve"> (${escapeXml(art.mime_type)})</w:t></w:r>` : ""}</w:p>`,
+        const body = art.content ? cleanText(art.content).slice(0, EXPORT_LIMITS.artifactText) : "";
+        children.push(
+          new Paragraph({
+            spacing: { before: 80, after: 60 },
+            shading: { type: ShadingType.CLEAR, color: "auto", fill: "F6F8FA" },
+            indent: { left: 140 },
+            children: [
+              new TextRun({
+                text: `Artifact: ${cleanText(art.filename || art.type)}`,
+                bold: true,
+                size: 18,
+              }),
+              ...(body ? [new TextRun({ text: `\n${body}`, font: "Consolas", size: 17, break: 1 })] : []),
+            ],
+          }),
         );
-        if (art.content && art.content.length < 5000) {
-          bodyXml.push(codeBlock(art.content));
-        }
       }
     }
-
-    // Message separator
-    bodyXml.push(
-      '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="1" w:color="E1E4E8"/></w:pBdr><w:spacing w:before="160" w:after="160"/></w:pPr></w:p>',
-    );
   }
 
-  const documentXml =
-    XML_HEADER +
-    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
-    `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ` +
-    `xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">` +
-    `<w:body>${bodyXml.join("")}` +
-    `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>` +
-    `</w:body></w:document>`;
+  const doc = new Document({
+    title: docTitle,
+    creator: "DeepTutor",
+    sections: [
+      {
+        properties: {},
+        children,
+      },
+    ],
+  });
 
-  const contentTypesXml =
-    XML_HEADER +
-    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
-    '<Default Extension="xml" ContentType="application/xml"/>' +
-    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
-    '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
-    "</Types>";
-
-  const rootRelsXml =
-    XML_HEADER +
-    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
-    "</Relationships>";
-
-  const documentRelsXml =
-    XML_HEADER +
-    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
-    "</Relationships>";
-
-  const stylesXml =
-    XML_HEADER +
-    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>' +
-    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:style>' +
-    '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="80"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="28"/><w:color w:val="0969DA"/></w:rPr></w:style>' +
-    '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="180" w:after="60"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="24"/><w:color w:val="1F2328"/></w:rPr></w:style>' +
-    '<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="140" w:after="40"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="20"/><w:color w:val="32383F"/></w:rPr></w:style>' +
-    '<w:style w:type="paragraph" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="1F2328"/></w:rPr></w:style>' +
-    '<w:style w:type="character" w:styleId="CodeChar"><w:name w:val="Inline Code"/><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="20"/><w:shd w:val="clear" w:color="auto" w:fill="EFF1F3"/></w:rPr></w:style>' +
-    '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0969DA"/><w:u w:val="single"/></w:rPr></w:style>' +
-    '<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="D0D7DE"/></w:pBdr><w:ind w:left="240"/><w:spacing w:after="120"/></w:pPr><w:rPr><w:color w:val="57606A"/><w:i/></w:rPr></w:style>' +
-    "</w:styles>";
-
-  const encoder = new TextEncoder();
-  const entries: ZipEntry[] = [
-    { path: "[Content_Types].xml", bytes: encoder.encode(contentTypesXml) },
-    { path: "_rels/.rels", bytes: encoder.encode(rootRelsXml) },
-    { path: "word/_rels/document.xml.rels", bytes: encoder.encode(documentRelsXml) },
-    { path: "word/styles.xml", bytes: encoder.encode(stylesXml) },
-    { path: "word/document.xml", bytes: encoder.encode(documentXml) },
-  ];
-
-  return createZipBlob(
-    entries,
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    metadata.exportedAt,
-  );
+  return Packer.toBlob(doc);
 }

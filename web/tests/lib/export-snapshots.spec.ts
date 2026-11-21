@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { inflateRawSync } from "node:zlib";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -45,6 +46,7 @@ function extractStoreZipEntries(bytes: Uint8Array): Map<string, string> {
     if (signature !== 0x04034b50) {
       break;
     }
+    const compressionMethod = view.getUint16(offset + 8, true);
     const compressedSize = view.getUint32(offset + 18, true);
     const filenameLength = view.getUint16(offset + 26, true);
     const extraLength = view.getUint16(offset + 28, true);
@@ -53,7 +55,9 @@ function extractStoreZipEntries(bytes: Uint8Array): Map<string, string> {
     const dataEnd = dataStart + compressedSize;
 
     const entryPath = decoder.decode(bytes.subarray(nameStart, nameStart + filenameLength));
-    const entryContent = decoder.decode(bytes.subarray(dataStart, dataEnd));
+    const rawSlice = bytes.subarray(dataStart, dataEnd);
+    const entryBytes = compressionMethod === 8 ? inflateRawSync(rawSlice) : rawSlice;
+    const entryContent = decoder.decode(entryBytes);
     entries.set(entryPath, entryContent);
 
     offset = dataEnd;
