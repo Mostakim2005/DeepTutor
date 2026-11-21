@@ -3,6 +3,8 @@
 
 ---
 
+> **Updated Status (Post-Batch 1–4 Patches):** Wave 1 is 100% complete (including `AGENTS.md`, `docs/VISUAL_LOG.md`, and `docs/DECISIONS_AND_TRAPS.md`). Wave 2 backend, CLI (`scripts/configure_ai.py`), and Web Settings UI (`Model & Harness Hub`, Batch 1) are complete; only `Delta 1` (`omniroute`) and `Charlie` (Paradee TTS, pending confirmation) remain in Wave 2. Wave 3 `SUN-03`, `L-01`, and `L-03` (Batches 2–4) are complete; only dependency-gated `OSS-01` (`dolanmiu/docx`) and `OSS-02` (`pdf-lib` + `fontkit`) remain in Wave 3.
+
 ## 1. Executive Summary & Workspace Verification
 
 ### [STATUS: Workspace-Verification] | Aliases: active folder, repository location, git branch
@@ -38,8 +40,8 @@ flowchart TD
     subgraph Wave1["Wave 1 Status"]
         K1[1. Add 49 missing hu/it locale keys]:::doneNode
         K2[2. L-09 Deterministic export snapshots & fixtures]:::doneNode
-        K3[3. Trim AGENTS.md & replace VISUAL_GUIDE.html with VISUAL_LOG.md]:::pendingNode
-        K4[4. Full gate verification & commit on sync/v1.7.3]:::pendingNode
+        K3[3. Trim AGENTS.md & replace VISUAL_GUIDE.html with VISUAL_LOG.md]:::doneNode
+        K4[4. Full gate verification & commit on sync/v1.7.3]:::doneNode
     end
 
     W1 --> K1
@@ -51,17 +53,17 @@ flowchart TD
     K4 --> W3[Wave 3: Export Overhaul & Lateral QoL]:::pendingNode
 
     subgraph Wave2["Wave 2 (Pending Confirmation)"]
-        B1[Bravo 1: Unified Web Settings + configure-ai CLI]:::waitingNode
-        B4[Bravo 4: Live model sync & custom model catalogs]:::waitingNode
-        B5[Bravo 5: Plug-and-play CLI/ACP harnesses]:::waitingNode
+        B1[Bravo 1: Unified Web Settings + configure-ai CLI]:::doneNode
+        B4[Bravo 4: Live model sync & custom model catalogs]:::doneNode
+        B5[Bravo 5: Plug-and-play CLI/ACP harnesses]:::doneNode
         D1[Delta 1: omniroute, agy, cmdc, opencode, dsh]:::waitingNode
         C1[Charlie: Paradee TTS integration]:::waitingNode
     end
 
     subgraph Wave3["Wave 3 (Post-Wave 1/2)"]
-        S3[SUN-03: Decompose ExportChatModal.tsx]:::pendingNode
-        L1[L-01: Export presets & Export this answer]:::pendingNode
-        L3[L-03: Anki CSV flashcard export]:::pendingNode
+        S3[SUN-03: Decompose ExportChatModal.tsx]:::doneNode
+        L1[L-01: Export presets & Export this answer]:::doneNode
+        L3[L-03: Anki CSV flashcard export]:::doneNode
         O1[OSS-01: dolanmiu/docx migration]:::pendingNode
         O2[OSS-02: pdf-lib + fontkit Unicode PDF]:::pendingNode
     end

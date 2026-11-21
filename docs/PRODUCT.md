@@ -43,7 +43,9 @@
 * **User Intention (Non-Negotiable):** Export must survive upstream updates, include native equations and real tables, and never require a server round trip or an API key.
 * **Visual / UI Behavior:** The Export action opens a modal with message range, role filters, element toggles, and a live preview; the same action is available from the chat header and the session list.
 * **Code Anchors (Grep Targets):**
-  * `web/features/export/ExportChatModal.tsx` -> `ExportChatModal`
+  * `web/features/export/ExportChatModal.tsx` -> `ExportChatModal` (decomposed with `useExportSelection`, `ExportMessagePicker`, `ExportOptionsGrid`)
+  * `deeptutor/services/settings/export_presets.py` -> `load_export_presets`, `upsert_export_preset`, `delete_export_preset`, `set_last_used_export_preset`
+  * `web/lib/export/anki-csv.ts` -> `quizQuestionsToAnkiCards`, `masteryQuestionsToAnkiCards`, `serializeAnkiCsv`, `downloadAnkiCsv`
   * `web/lib/export/exporter.ts` -> `exportSession`
   * `web/lib/export/docx-builder.ts` -> `buildDocx`, `wordTable`
   * `web/lib/export/xlsx-builder.ts` -> Excel workbook builder
@@ -70,6 +72,7 @@
   * `deeptutor/services/subagent/model_preferences.py` -> `load_model_preferences`, `export_preferences_bundle`, `import_preferences_bundle`, `find_stale_preferences`, `prune_unknown`, `mark_unavailable`, `clear_unavailable`
   * `deeptutor/api/routers/settings.py` -> `/model-preferences`, `/toggle-pin`, `/toggle-hide`, `/export`, `/import`, `/stale`, `/prune`, `/mark-unavailable`, `/clear-unavailable`
   * `web/components/chat/home/AnswerModeMenu.tsx` -> `ModelPreferenceActions`
+  * `web/features/settings/sections/models/ModelHubSettingsSection.tsx` -> `ModelHubSettingsSection` (`web/lib/model-hub-api.ts`)
 
 ### [FEATURE: Cross-Provider Reasoning Effort Normalisation] | Aliases: reasoning effort, thinking level, Gemini 400, minimal effort, effort badges
 > **1-Line Summary:** One effort scale in the UI is translated to each provider's accepted values so a model never rejects a request with an HTTP 400.
@@ -168,7 +171,7 @@
 * **User Intention:** Make each future DeepTutor release a predictable, reviewable operation instead of a manual archaeology exercise.
 * **Target Integration Point:** `docs/ARCHITECTURE.md` recipes and the `upstream` remote workflow.
 
-### [WISHLIST: Export Presets] | Aliases: export templates, saved export settings, publication profile
+### [DONE: Export Presets] | Aliases: export templates, saved export settings, publication profile
 > **1-Line Summary:** Save named combinations of format, element toggles, and message scope for recurring export styles.
 * **User Intention:** Avoid re-selecting the same export options for every study document.
 * **Target Integration Point:** `web/features/export/ExportChatModal.tsx` and `web/lib/export/types.ts`.
