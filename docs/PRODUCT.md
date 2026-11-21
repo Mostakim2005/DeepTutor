@@ -164,6 +164,14 @@
   * `deeptutor/runtime/launcher.py` -> Windows conflict hotspot
   * `deeptutor/services/cli_apps/paths.py` -> Windows path conflict hotspot
 
+### [FEATURE: Local Paradee TTS Integration] | Aliases: Charlie 1, Paradee TTS, port 8855, af_heart, local voice
+> **1-Line Summary:** Local Paradee TTS (`http://127.0.0.1:8855/v1`) is a first-class voice provider with voice picker (`af_heart`, `am_puck`, `bf_isabella`, `bm_fable`) and lightweight on-demand silent auto-start.
+* **User Intention (Non-Negotiable):** Zero RAM is used until speech is actually requested; `stop.ps1` cleanly stops port `8855` alongside DeepTutor.
+* **Code Anchors (Grep Targets):**
+  * `deeptutor/services/voice/adapters/paradee.py` -> `ParadeeTTSAdapter`, `ensure_paradee_running`, `list_paradee_voices`
+  * `deeptutor/services/config/provider_runtime.py` -> `TTS_PROVIDERS["paradee"]`
+  * `stop.ps1` -> port `8855` cleanup
+
 ## 3. Planned Features & App-Merge Wishlist
 
 ### [WISHLIST: Guided Upstream Intake] | Aliases: update assistant, release diff, feature picker, merge helper

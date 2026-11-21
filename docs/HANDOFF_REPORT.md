@@ -3,7 +3,7 @@
 
 ---
 
-> **Updated Status (Post-Batch 1–4 Patches):** Wave 1 is 100% complete (including `AGENTS.md`, `docs/VISUAL_LOG.md`, and `docs/DECISIONS_AND_TRAPS.md`). Wave 2 backend, CLI (`scripts/configure_ai.py`), and Web Settings UI (`Model & Harness Hub`, Batch 1) are complete; only `Delta 1` (`omniroute`) and `Charlie` (Paradee TTS, pending confirmation) remain in Wave 2. Wave 3 `SUN-03`, `L-01`, and `L-03` (Batches 2–4) are complete; only dependency-gated `OSS-01` (`dolanmiu/docx`) and `OSS-02` (`pdf-lib` + `fontkit`) remain in Wave 3.
+> **Updated Status (Post-Batch 1–4 Patches):** Wave 1 is 100% complete (including `AGENTS.md`, `docs/VISUAL_LOG.md`, and `docs/DECISIONS_AND_TRAPS.md`). Wave 2 backend, CLI (`scripts/configure_ai.py`), and Web Settings UI (`Model & Harness Hub`, Batch 1) are complete; Wave 2 is complete with `Charlie 1` (local Paradee TTS with voice picker and silent on-demand auto-start, Batch 6) and `Delta 1` (`omniroute`) intentionally skipped by user decision. Wave 3 is complete (`SUN-03`, `L-01`, `L-03`, `OSS-01` `dolanmiu/docx`, and `OSS-02` `pdf-lib` + `@pdf-lib/fontkit`, Batches 2–4 & 7–8); run `npm install` + `npx vitest run tests/lib/export-snapshots.spec.ts --update` in CI/local to refresh lockfile and L-09 binary hashes.
 
 ## 1. Executive Summary & Workspace Verification
 
@@ -56,16 +56,16 @@ flowchart TD
         B1[Bravo 1: Unified Web Settings + configure-ai CLI]:::doneNode
         B4[Bravo 4: Live model sync & custom model catalogs]:::doneNode
         B5[Bravo 5: Plug-and-play CLI/ACP harnesses]:::doneNode
-        D1[Delta 1: omniroute, agy, cmdc, opencode, dsh]:::waitingNode
-        C1[Charlie: Paradee TTS integration]:::waitingNode
+        D1[Delta 1: agy, cmdc, opencode, dsh, freebuff (omniroute skipped)]:::doneNode
+        C1[Charlie 1: Paradee TTS + on-demand auto-start]:::doneNode
     end
 
     subgraph Wave3["Wave 3 (Post-Wave 1/2)"]
         S3[SUN-03: Decompose ExportChatModal.tsx]:::doneNode
         L1[L-01: Export presets & Export this answer]:::doneNode
         L3[L-03: Anki CSV flashcard export]:::doneNode
-        O1[OSS-01: dolanmiu/docx migration]:::pendingNode
-        O2[OSS-02: pdf-lib + fontkit Unicode PDF]:::pendingNode
+        O1[OSS-01: dolanmiu/docx migration]:::doneNode
+        O2[OSS-02: pdf-lib + fontkit Unicode PDF]:::doneNode
     end
 
     W2 --> B1 & B4 & B5 & D1 & C1
