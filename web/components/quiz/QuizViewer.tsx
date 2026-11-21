@@ -13,6 +13,7 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  Download,
   ChevronRight,
   Eye,
   ImagePlus,
@@ -55,6 +56,7 @@ import {
 import { recordQuizResults } from "@/lib/session-api";
 import { apiUrl } from "@/lib/api";
 import Tooltip from "@/shared/ui/Tooltip";
+import { downloadAnkiCsv, quizQuestionsToAnkiCards } from "@/lib/export/anki-csv";
 
 import { randomUuid } from "@/lib/random-uuid";
 
@@ -795,6 +797,20 @@ export default function QuizViewer({
         <span className="text-[11px] font-semibold text-[var(--muted-foreground)]">
           {completedCount}/{total}
         </span>
+        <Tooltip label={t("Export Anki CSV")}>
+          <button
+            type="button"
+            onClick={() => {
+              const cards = quizQuestionsToAnkiCards(questions, sessionId ?? "");
+              downloadAnkiCsv(cards, "deeptutor-quiz-anki");
+            }}
+            aria-label={t("Export Anki CSV")}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--muted)]/40 px-2 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          >
+            <Download size={12} />
+            <span className="hidden sm:inline">{t("Anki CSV")}</span>
+          </button>
+        </Tooltip>
         <div className="flex flex-1 flex-wrap gap-1">
           {questions.map((question, questionIndex) => {
             const answer = answers[questionIndex];

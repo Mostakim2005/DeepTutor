@@ -7709,5 +7709,7 @@
   "Failed to save export preset": "Failed to save export preset",
   "Export preset deleted.": "Export preset deleted.",
   "Failed to delete export preset": "Failed to delete export preset",
-  "Export this answer": "Export this answer"
+  "Export this answer": "Export this answer",
+  "Export Anki CSV": "Export Anki CSV",
+  "Anki CSV": "Anki CSV"
 }

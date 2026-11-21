@@ -6804,5 +6804,7 @@
   "Failed to save export preset": "保存导出预设失败",
   "Export preset deleted.": "导出预设已删除。",
   "Failed to delete export preset": "删除导出预设失败",
-  "Export this answer": "导出此回答"
+  "Export this answer": "导出此回答",
+  "Export Anki CSV": "导出 Anki CSV",
+  "Anki CSV": "Anki CSV"
 }
