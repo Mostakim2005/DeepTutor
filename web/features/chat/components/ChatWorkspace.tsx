@@ -2605,6 +2605,7 @@ export default function ChatWorkspace() {
   }, []);
 
   const [showExportModal, setShowExportModal] = useState(false);
+  const [exportInitialIds, setExportInitialIds] = useState<Array<string | number> | undefined>(undefined);
   const handleOpenExportModal = useCallback(() => {
     if (!state.messages.length) return;
     setShowExportModal(true);
@@ -2846,6 +2847,10 @@ export default function ChatWorkspace() {
                         sessionId={state.sessionId}
                         language={state.language}
                         onCopyAssistantMessage={copyAssistantMessage}
+                        onExportMessage={(messageId) => {
+                          setExportInitialIds([messageId]);
+                          setShowExportModal(true);
+                        }}
                         onRegenerateMessage={handleRegenerateMessage}
                         canResendLastTurn={state.lastTurnFailed}
                         onResendLastTurn={handleResendMessage}
@@ -3175,7 +3180,11 @@ export default function ChatWorkspace() {
             />
             <ExportChatModal
               open={showExportModal}
-              onClose={() => setShowExportModal(false)}
+              onClose={() => {
+                setShowExportModal(false);
+                setExportInitialIds(undefined);
+              }}
+              initialSelectedIds={exportInitialIds}
               messages={state.messages}
               title={displaySessionTitle}
               workspaceId={sessionStoreId}

@@ -6795,5 +6795,14 @@
   "Scan for Stale Entries": "扫描过期项",
   "Stale Preference Cleanup": "过期偏好清理",
   "Stale entries detected": "检测到过期项",
-  "Unavailable flag cleared.": "已清除不可用标记。"
+  "Unavailable flag cleared.": "已清除不可用标记。",
+  "Export Presets": "导出预设",
+  "Save Current as Preset": "保存当前配置为预设",
+  "Delete preset": "删除预设",
+  "Preset name (e.g. Exam Study Pack)": "预设名称（如：考前复习包）",
+  "Export preset saved.": "导出预设已保存。",
+  "Failed to save export preset": "保存导出预设失败",
+  "Export preset deleted.": "导出预设已删除。",
+  "Failed to delete export preset": "删除导出预设失败",
+  "Export this answer": "导出此回答"
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   FileText,
   FileSpreadsheet,
@@ -14,6 +14,9 @@ import {
   X,
   Layers,
   Printer,
+  Bookmark,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { notify } from "@/lib/notifications";
@@ -28,6 +31,13 @@ import {
   DEFAULT_EXPORT_FILTER_OPTIONS,
 } from "@/lib/export";
 import { normalizeMessages, type InputMessage } from "@/lib/export/adapter";
+import {
+  getExportPresets,
+  saveExportPreset,
+  deleteExportPreset,
+  setLastUsedExportPreset,
+  type ExportPreset,
+} from "@/lib/export/presets-api";
 import { useExportSelection } from "./useExportSelection";
 import { ExportMessagePicker } from "./ExportMessagePicker";
 import { ExportOptionsGrid } from "./ExportOptionsGrid";
@@ -129,6 +139,10 @@ export default function ExportChatModal({
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showPicker, setShowPicker] = useState(true);
+  const [presets, setPresets] = useState<ExportPreset[]>([]);
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [newPresetName, setNewPresetName] = useState("");
+  const [showSavePreset, setShowSavePreset] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedList = useMemo(() => normalizeMessages(messages), [messages]);
@@ -148,6 +162,98 @@ export default function ExportChatModal({
     handleToggleMessage,
     togglePreview,
   } = useExportSelection(normalizedList, open, focusDialog, initialSelectedIds);
+
+  const applyPreset = useCallback(
+    (preset: ExportPreset, applyScope = true) => {
+      setSelectedFormat(preset.format);
+      setOptions({
+        ...DEFAULT_EXPORT_FILTER_OPTIONS,
+        ...preset.options,
+      });
+      setActivePresetId(preset.id);
+      if (applyScope && (!initialSelectedIds || initialSelectedIds.length === 0)) {
+        if (preset.scope === "answers") handleSelectOnlyAssistant();
+        else if (preset.scope === "questions") handleSelectOnlyUser();
+        else handleSelectAll();
+      }
+    },
+    [initialSelectedIds, handleSelectAll, handleSelectOnlyAssistant, handleSelectOnlyUser],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getExportPresets()
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.presets ?? [];
+        setPresets(list);
+        if (res.last_used_preset_id) {
+          const found = list.find((p) => p.id === res.last_used_preset_id);
+          if (found) {
+            applyPreset(found, false);
+          }
+        }
+      })
+      .catch(() => {
+        /* presets are optional; modal stays usable offline */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, applyPreset]);
+
+  const handleSavePreset = async () => {
+    const trimmed = newPresetName.trim();
+    if (!trimmed) return;
+    const slug = trimmed
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || `preset-${Date.now()}`;
+    const scope =
+      stats.selectedUserCount === 0 && stats.selectedAssistantCount > 0
+        ? "answers"
+        : stats.selectedAssistantCount === 0 && stats.selectedUserCount > 0
+          ? "questions"
+          : "all";
+    try {
+      const res = await saveExportPreset(slug, {
+        name: trimmed,
+        format: selectedFormat,
+        scope,
+        options: {
+          includeUserPrompts: options.includeUserPrompts,
+          includeThinking: options.includeThinking,
+          includeToolCalls: options.includeToolCalls,
+          includeToolResults: options.includeToolResults,
+          includeSources: options.includeSources,
+          includeArtifacts: options.includeArtifacts,
+          includeTables: options.includeTables,
+        },
+      });
+      setPresets(res.presets ?? []);
+      setActivePresetId(slug);
+      setNewPresetName("");
+      setShowSavePreset(false);
+      notify(t("Export preset saved."), { tone: "success" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify(`${t("Failed to save export preset")}: ${msg}`, { tone: "error" });
+    }
+  };
+
+  const handleDeletePreset = async (presetId: string) => {
+    try {
+      await deleteExportPreset(presetId);
+      setPresets((prev) => prev.filter((p) => p.id !== presetId));
+      if (activePresetId === presetId) setActivePresetId(null);
+      notify(t("Export preset deleted."), { tone: "success" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      notify(`${t("Failed to delete export preset")}: ${msg}`, { tone: "error" });
+    }
+  };
 
   const handleToggleOption = useCallback((key: keyof ExportFilterOptions) => {
     setOptions((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -206,6 +312,9 @@ export default function ExportChatModal({
         metadata,
       );
       triggerDownload(result.blob, result.filename);
+      if (activePresetId) {
+        void setLastUsedExportPreset(activePresetId).catch(() => {});
+      }
       notify(t("Export completed successfully!"), { tone: "success" });
       onClose();
     } catch (err: unknown) {
@@ -293,6 +402,76 @@ export default function ExportChatModal({
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 space-y-6 pr-1">
+          {presets.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] flex items-center gap-1.5">
+                  <Bookmark size={12} />
+                  {t("Export Presets")}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowSavePreset((prev) => !prev)}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  <Plus size={12} />
+                  {t("Save Current as Preset")}
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {presets.map((preset) => {
+                  const isActive = activePresetId === preset.id;
+                  return (
+                    <div
+                      key={preset.id}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                        isActive
+                          ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium"
+                          : "border-[var(--border)] hover:bg-[var(--muted)]/60"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => applyPreset(preset, true)}
+                        className="text-left"
+                      >
+                        {preset.name}
+                      </button>
+                      {!preset.builtin && (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeletePreset(preset.id)}
+                          aria-label={t("Delete preset")}
+                          className="ml-0.5 text-[var(--muted-foreground)] hover:text-red-500"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {showSavePreset && (
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={newPresetName}
+                    onChange={(e) => setNewPresetName(e.target.value)}
+                    placeholder={t("Preset name (e.g. Exam Study Pack)")}
+                    className="flex-1 rounded-lg border border-[var(--border)] bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSavePreset()}
+                    disabled={!newPresetName.trim()}
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {t("Save")}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2.5 block">
               {t("Select Export Format")}

@@ -6813,5 +6813,14 @@
   "Scan for Stale Entries": "Scan for Stale Entries",
   "Stale Preference Cleanup": "Stale Preference Cleanup",
   "Stale entries detected": "Stale entries detected",
-  "Unavailable flag cleared.": "Unavailable flag cleared."
+  "Unavailable flag cleared.": "Unavailable flag cleared.",
+  "Export Presets": "Export Presets",
+  "Save Current as Preset": "Save Current as Preset",
+  "Delete preset": "Delete preset",
+  "Preset name (e.g. Exam Study Pack)": "Preset name (e.g. Exam Study Pack)",
+  "Export preset saved.": "Export preset saved.",
+  "Failed to save export preset": "Failed to save export preset",
+  "Export preset deleted.": "Export preset deleted.",
+  "Failed to delete export preset": "Failed to delete export preset",
+  "Export this answer": "Export this answer"
 }

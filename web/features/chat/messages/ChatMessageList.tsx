@@ -22,6 +22,7 @@ import {
   ChevronRight,
   ClipboardList,
   Copy,
+  Download,
   AlertCircle,
   Database,
   Loader2,
@@ -1954,6 +1955,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   sessionId,
   language,
   onCopyAssistantMessage,
+  onExportMessage,
   onRegenerateMessage,
   canResendLastTurn = false,
   onResendLastTurn,
@@ -1988,6 +1990,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   sessionId?: string | null;
   language?: string;
   onCopyAssistantMessage: CopyHandler;
+  onExportMessage?: (messageId: string | number) => void;
   onRegenerateMessage: () => void;
   /** True when the last turn failed (not cancelled) and streaming has
    *  stopped. Drives the Resend affordance on the trailing assistant. */
@@ -2494,6 +2497,18 @@ export const ChatMessageList = memo(function ChatMessageList({
                         content={msg.content}
                         onCopy={onCopyAssistantMessage}
                       />
+                    )}
+                    {showActions && onExportMessage && msg.content && (
+                      <Tooltip label={t("Export this answer")} side="bottom">
+                        <button
+                          type="button"
+                          onClick={() => onExportMessage(msg.id ?? i)}
+                          aria-label={t("Export this answer")}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                        >
+                          <Download size={14} strokeWidth={1.6} />
+                        </button>
+                      </Tooltip>
                     )}
                     {showActions && !compactActions && (
                       <>

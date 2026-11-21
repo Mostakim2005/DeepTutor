@@ -2890,6 +2890,51 @@ async def delete_custom_harness_route(kind: str):
     removed = await asyncio.to_thread(delete_custom_harness, kind)
     return {"kind": kind, "deleted": removed}
 
+# ── Export Presets (L-01) ────────────────────────────────────────────────────
 
 
+class ExportPresetPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    format: str = Field(default="docx", max_length=16)
+    scope: str = Field(default="all", max_length=16)
+    options: dict[str, bool] = Field(default_factory=dict)
 
+
+class LastUsedExportPresetRequest(BaseModel):
+    preset_id: str | None = Field(default=None, max_length=64)
+
+
+@router.get("/export-presets")
+async def get_export_presets_route():
+    """Return built-in and user-saved export presets plus last-used preset id."""
+    from deeptutor.services.settings.export_presets import load_export_presets
+
+    return await asyncio.to_thread(load_export_presets)
+
+
+@router.put("/export-presets/{preset_id}")
+async def upsert_export_preset_route(preset_id: str, payload: ExportPresetPayload):
+    """Create or update a named export preset in data/user/settings/export_presets.json."""
+    from deeptutor.services.settings.export_presets import upsert_export_preset
+
+    try:
+        return await asyncio.to_thread(upsert_export_preset, preset_id, payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/export-presets/{preset_id}")
+async def delete_export_preset_route(preset_id: str):
+    """Delete a user-saved export preset."""
+    from deeptutor.services.settings.export_presets import delete_export_preset
+
+    deleted = await asyncio.to_thread(delete_export_preset, preset_id)
+    return {"id": preset_id, "deleted": deleted}
+
+
+@router.post("/export-presets/last-used")
+async def set_last_used_export_preset_route(payload: LastUsedExportPresetRequest):
+    """Remember the last-used export preset id."""
+    from deeptutor.services.settings.export_presets import set_last_used_export_preset
+
+    return await asyncio.to_thread(set_last_used_export_preset, payload.preset_id)
