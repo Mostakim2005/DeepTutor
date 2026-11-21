@@ -62,6 +62,11 @@ def discovery_url(base: str, provider: str) -> str:
 async def discover_voices(catalog: dict, profile_id: str, model_id: str) -> dict:
     config = resolve_tts_runtime_config(selected_catalog(catalog, "tts", profile_id, model_id))
     provider = config.provider_name
+    if provider == "paradee":
+        from deeptutor.services.voice.adapters.paradee import list_paradee_voices
+
+        paradee_voices = await list_paradee_voices(config.base_url)
+        return {"status": "ready", "scope": "local", "voices": paradee_voices}
     if provider == "edge":
         from deeptutor.services.voice.adapters.edge import list_edge_voices
 

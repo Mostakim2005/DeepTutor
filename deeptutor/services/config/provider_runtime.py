@@ -488,6 +488,16 @@ TTS_PROVIDERS: dict[str, VoiceProviderSpec] = {
         default_voice="zh-CN-XiaoxiaoNeural",
         is_local=True,
     ),
+    # Local Paradee TTS (Charlie 1): OpenAI-compatible /v1/audio/speech on port 8855,
+    # auto-started silently on demand when installed under Services/paradee-tts.
+    "paradee": VoiceProviderSpec(
+        label="Paradee TTS (Local)",
+        default_api_base="http://127.0.0.1:8855/v1",
+        adapter="paradee",
+        default_model="paradee-tts",
+        default_voice="af_heart",
+        is_local=True,
+    ),
 }
 
 STT_PROVIDERS: dict[str, VoiceProviderSpec] = {

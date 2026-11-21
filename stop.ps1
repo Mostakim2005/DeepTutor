@@ -11,7 +11,7 @@ if (Test-Path $Python) {
     & $Python -m deeptutor_cli.main stop --home $ProjectDir 2>$null
 }
 
-$ports = @(8001, 3782)
+$ports = @(8001, 3782, 8855)
 $pids = Get-NetTCPConnection -LocalPort $ports -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
 if ($pids) {
     foreach ($p in $pids) {
@@ -21,7 +21,7 @@ if ($pids) {
         } catch {}
     }
 } else {
-    Write-Host "No active DeepTutor processes were found on ports 8001/3782." -ForegroundColor Gray
+    Write-Host "No active DeepTutor processes were found on ports 8001/3782/8855." -ForegroundColor Gray
 }
 
 Write-Host ""

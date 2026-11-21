@@ -168,6 +168,24 @@ def _tts_models(provider: str) -> tuple[list[dict], str]:
                 language_note="Saudi Arabic; enter a voice ID from the provider documentation.",
             ),
         ], "https://console.groq.com/docs/text-to-speech"
+    if provider == "paradee":
+        return [
+            preset(
+                "paradee-tts",
+                formats=["wav", "mp3"],
+                speed={"min": 0.5, "max": 2, "step": 0.05},
+                voices=[
+                    {"id": "af_heart", "label": "Heart (US Female)"},
+                    {"id": "am_puck", "label": "Puck (US Male)"},
+                    {"id": "bf_isabella", "label": "Isabella (UK Female)"},
+                    {"id": "bm_fable", "label": "Fable (UK Male)"},
+                ],
+                configuration_note=(
+                    "Local Paradee TTS on http://127.0.0.1:8855/v1; no API key required. "
+                    "Auto-starts silently on first speech request when installed locally."
+                ),
+            )
+        ], "http://127.0.0.1:8855/v1"
     if provider == "edge":
         return [
             preset(
@@ -236,6 +254,8 @@ def voice_options(provider: str, service: str) -> dict:
             fallback = preset("", formats=["wav", "pcm"], instructions=True)
         elif provider == "edge":
             fallback = {**deepcopy(models[0]), "id": ""}
+        elif provider == "paradee":
+            fallback = {**deepcopy(models[0]), "id": ""}
         elif provider == "xai":
             fallback = preset(
                 "",
@@ -282,3 +302,9 @@ def voice_model_options(provider: str, service: str, model: str) -> dict:
         ),
         options["fallback"],
     )
+
+
+def speech_options(service: str, provider: str) -> dict:
+    """Convenience alias for voice_options with (service, provider) argument order."""
+    return voice_options(provider, service)
+
